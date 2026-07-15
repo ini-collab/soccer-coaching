@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>サッカーコーチノート</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9A%BD%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <header class="app-header">
+    <h1>⚽ サッカーコーチノート <small>〜 年中さんから小学生のためのコーチングアプリ 〜</small></h1>
+    <nav class="tabs">
+      <button class="tab-btn active" data-tab="menus">📋 練習メニュー</button>
+      <button class="tab-btn" data-tab="drills">🏃 ドリル集</button>
+      <button class="tab-btn" data-tab="board">🧠 戦術ボード</button>
+      <button class="tab-btn" data-tab="formation">🧩 ポジション</button>
+      <button class="tab-btn" data-tab="data">💾 データ</button>
+    </nav>
+  </header>
+
+  <main>
+
+    <!-- ============ 練習メニュー ============ -->
+    <section id="tab-menus" class="tab active">
+      <div class="pane-head">
+        <h2>練習メニュー</h2>
+        <button id="menu-new" class="btn primary">＋ 新しいメニュー</button>
+      </div>
+      <div id="menu-list" class="chip-list"></div>
+
+      <div id="menu-editor" class="card hidden">
+        <div class="form-grid">
+          <label>タイトル<input id="menu-title" placeholder="例：土曜日の練習"></label>
+          <label>日付<input id="menu-date" type="date"></label>
+          <label>対象<select id="menu-age"></select></label>
+          <label>場所・備考<input id="menu-note" placeholder="例：第2グラウンド"></label>
+        </div>
+
+        <h3>メニュー内容 <span id="menu-total" class="total"></span></h3>
+        <div id="menu-items"></div>
+        <button id="menu-add-item" class="btn">＋ 項目を追加</button>
+
+        <div class="btn-row end">
+          <button id="menu-print" class="btn primary">🖨 印刷（配布用）</button>
+          <button id="menu-export" class="btn">📤 JSON書き出し</button>
+          <button id="menu-delete" class="btn danger">🗑 メニューを削除</button>
+        </div>
+        <p class="hint">💡 入力内容は自動で保存されます。「印刷」からPDF保存もできます。</p>
+      </div>
+    </section>
+
+    <!-- ============ ドリル集 ============ -->
+    <section id="tab-drills" class="tab">
+      <div class="pane-head">
+        <h2>ドリル集（練習の引き出し）</h2>
+        <button id="drill-new" class="btn primary">＋ 新しいドリル</button>
+      </div>
+
+      <div id="drill-form" class="card hidden">
+        <h3 id="drill-form-title">新しいドリル</h3>
+        <div class="form-grid">
+          <label>ドリル名<input id="df-name" placeholder="例：鳥かごパス"></label>
+          <label>カテゴリ<select id="df-category"></select></label>
+          <label>対象年齢<select id="df-age"></select></label>
+          <label>目安時間（分）<input id="df-duration" type="number" min="0" max="180" inputmode="numeric"></label>
+          <label>人数<input id="df-players" placeholder="例：4人1組"></label>
+          <label>用具<input id="df-equipment" placeholder="例：コーン4個、ビブス"></label>
+        </div>
+        <label class="block">やり方<textarea id="df-desc" rows="4" placeholder="ルール・進め方を書きます"></textarea></label>
+        <label class="block">コーチングポイント<textarea id="df-points" rows="3" placeholder="声かけのポイントなど"></textarea></label>
+        <label class="block">図（戦術ボードで作成したもの）<select id="df-board"></select></label>
+        <div class="btn-row end">
+          <button id="df-save" class="btn primary">保存</button>
+          <button id="df-cancel" class="btn">キャンセル</button>
+          <button id="df-delete" class="btn danger hidden">削除</button>
+        </div>
+      </div>
+
+      <div id="drill-list" class="drill-grid"></div>
+    </section>
+
+    <!-- ============ 戦術ボード ============ -->
+    <section id="tab-board" class="tab">
+      <div class="pane-head">
+        <h2>戦術ボード</h2>
+        <span class="hint">駒を置く → 指でドラッグして動かす／タップで番号・文字を変更</span>
+      </div>
+
+      <div class="board-layout">
+        <div class="board-main">
+          <div class="toolbar" id="board-tools">
+            <button class="tool active" data-tool="select">✋ 移動</button>
+            <button class="tool" data-tool="home">🔵 味方</button>
+            <button class="tool" data-tool="away">🔴 相手</button>
+            <button class="tool" data-tool="ball">⚽ ボール</button>
+            <button class="tool" data-tool="cone">🔺 コーン</button>
+            <button class="tool" data-tool="marker">🟡 マーカー</button>
+            <button class="tool" data-tool="goal">🥅 ゴール</button>
+            <button class="tool" data-tool="arrow">➡ 動き</button>
+            <button class="tool" data-tool="parrow">⤍ パス(点線)</button>
+            <button class="tool" data-tool="pen">✏️ ペン</button>
+            <button class="tool" data-tool="text">🔤 文字</button>
+            <button class="tool" data-tool="erase">🧹 消す</button>
+          </div>
+          <div class="toolbar sub">
+            <span class="tb-label">色</span>
+            <span id="board-colors" class="swatches"></span>
+            <select id="board-field" class="field-select"></select>
+            <button id="board-undo" class="btn small">↩ 戻す</button>
+            <button id="board-clear" class="btn small danger">全消去</button>
+          </div>
+
+          <svg id="board-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+
+          <div class="btn-row board-actions">
+            <input id="board-name" placeholder="ボード名（例：コーナーキックの守備）">
+            <button id="board-save" class="btn primary">💾 保存</button>
+            <button id="board-newbtn" class="btn">＋ 新規</button>
+            <button id="board-png" class="btn">🖼 PNG保存</button>
+            <button id="board-print" class="btn">🖨 印刷</button>
+            <span id="board-status" class="status"></span>
+          </div>
+        </div>
+
+        <aside class="board-side">
+          <h3>保存したボード</h3>
+          <div id="board-list"></div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ============ ポジション ============ -->
+    <section id="tab-formation" class="tab">
+      <div class="pane-head">
+        <h2>ポジション（フォーメーション）</h2>
+        <span class="hint">選手をドラッグで移動／タップで名前を入力</span>
+      </div>
+
+      <div class="board-layout">
+        <div class="board-main">
+          <div class="toolbar sub">
+            <select id="fm-format" class="field-select"></select>
+            <select id="fm-preset" class="field-select"></select>
+            <input id="fm-name" placeholder="名前（例：vs ○○FC 前半）">
+          </div>
+          <svg id="formation-svg" xmlns="http://www.w3.org/2000/svg" class="formation"></svg>
+          <div class="btn-row board-actions">
+            <button id="fm-save" class="btn primary">💾 保存</button>
+            <button id="fm-new" class="btn">＋ 新規</button>
+            <button id="fm-png" class="btn">🖼 PNG保存</button>
+            <button id="fm-print" class="btn">🖨 印刷</button>
+            <span id="fm-status" class="status"></span>
+          </div>
+        </div>
+
+        <aside class="board-side">
+          <h3>保存したポジション表</h3>
+          <div id="formation-list"></div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ============ データ管理 ============ -->
+    <section id="tab-data" class="tab">
+      <h2>データ管理</h2>
+      <div class="card">
+        <p id="data-stats"></p>
+        <div class="btn-row">
+          <button id="data-export" class="btn primary">📤 全データを書き出す（JSON）</button>
+          <button id="data-import" class="btn">📥 データを読み込む</button>
+          <input type="file" id="data-file" accept=".json,application/json" hidden>
+          <button id="data-reset" class="btn danger">🗑 全データを削除（初期化）</button>
+        </div>
+        <p class="hint">
+          ・データはこの端末のブラウザ内に自動保存されます。<br>
+          ・「書き出す」で作ったJSONファイルを、別のタブレットで「読み込む」と同じデータを使えます。<br>
+          ・練習メニュー単体のJSONは、メニュー画面の「JSON書き出し」から出力できます（読み込むと追加取り込みされます）。<br>
+          ・図はPNG画像として保存でき、各画面の「印刷」からは紙の配布資料やPDFを作成できます。
+        </p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- 印刷用領域（印刷時のみ表示） -->
+<div id="print-area"></div>
+
+<script src="js/board.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
