@@ -15,6 +15,22 @@ const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(
 const STORE_KEY = 'soccerCoachNote.v1';
 const AGE_GROUPS = ['年中・年長（U-6）', '低学年（U-8）', '中学年（U-10）', '高学年（U-12）', '全学年'];
 const CATEGORIES = ['ウォーミングアップ', 'ドリブル', 'パス・コントロール', 'シュート', '守備', 'ゲーム形式', 'コーディネーション', 'クールダウン', 'その他'];
+const GRADES = ['年少', '年中', '年長', '小1', '小2', '小3', '小4', '小5', '小6', 'その他'];
+const EVENT_TYPES = { practice: '練習', match: '試合', other: 'その他' };
+const ATT_STATES = {
+  present: { label: '出席', mark: '○', cls: 'att-present' },
+  absent:  { label: '欠席', mark: '×', cls: 'att-absent' },
+  maybe:   { label: '未定', mark: '△', cls: 'att-maybe' },
+  '':      { label: '未回答', mark: '−', cls: 'att-none' },
+};
+
+/* ---- 権限（標準版は常にコーチ＝フル機能。チーム共有版が上書き）---- */
+function appRole() { return window.APP_ROLE || 'coach'; }
+function canEdit() { return appRole() !== 'player'; }
+function isPlayer() { return appRole() === 'player'; }
+function myMemberId() { return window.APP_MEMBER_ID || null; }
+/** その出欠行を編集できるか（コーチは全員、プレイヤーは自分のみ）*/
+function canMarkAttendance(memberId) { return canEdit() || (memberId && memberId === myMemberId()); }
 
 /* ---- フォーメーション定義 ---- */
 const FORMATION_FORMATS = {
@@ -130,7 +146,35 @@ function seedDB() {
     formations: [
       { id: 'f1', name: '8人制 基本（3-3-1）サンプル', format: '8', preset: '3-3-1', positions: presetPositions('8', '3-3-1') },
     ],
+    members: [
+      { id: 'p1', name: 'たろう', grade: '小2', number: '7', note: '', userId: '' },
+      { id: 'p2', name: 'はなこ', grade: '小1', number: '10', note: '', userId: '' },
+      { id: 'p3', name: 'けんた', grade: '年長', number: '4', note: '', userId: '' },
+    ],
+    events: [
+      {
+        id: 'e1', type: 'practice', title: '土曜練習', date: futureDate(3), start: '09:00', end: '11:00',
+        place: '第2グラウンド', opponent: '', note: 'スパイク・すね当てを忘れずに', menuId: 'm1', result: null,
+      },
+      {
+        id: 'e2', type: 'match', title: '練習試合 vs さくらFC', date: futureDate(10), start: '10:00', end: '12:00',
+        place: 'さくら小学校', opponent: 'さくらFC', note: '集合はキックオフの30分前', menuId: '',
+        result: { us: 2, them: 1, memo: '前半に2点先制。最後まで走り切れた。' },
+      },
+    ],
+    attendance: [
+      { id: 'e1__p1', eventId: 'e1', memberId: 'p1', status: 'present', by: '' },
+      { id: 'e1__p2', eventId: 'e1', memberId: 'p2', status: 'maybe', by: '' },
+      { id: 'e2__p1', eventId: 'e2', memberId: 'p1', status: 'present', by: '' },
+    ],
   };
+}
+
+/** 今日からn日後の YYYY-MM-DD */
+function futureDate(n) {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function normalizeDB(d) {
@@ -140,6 +184,9 @@ function normalizeDB(d) {
     menus: Array.isArray(d.menus) ? d.menus : [],
     boards: Array.isArray(d.boards) ? d.boards : [],
     formations: Array.isArray(d.formations) ? d.formations : [],
+    members: Array.isArray(d.members) ? d.members : [],
+    events: Array.isArray(d.events) ? d.events : [],
+    attendance: Array.isArray(d.attendance) ? d.attendance : [],
   };
 }
 
@@ -163,6 +210,9 @@ const LocalStore = {
 function store() { return window.AppStore || LocalStore; }
 
 function saveDB() { store().save(DB); }
+
+/* サーバー同期版（team/js/remote.js）が現在のDBを参照するためのアクセサ */
+window.getAppDB = () => DB;
 
 /* =========================================================
  * ダウンロード・PNG書き出し
@@ -277,6 +327,114 @@ function formationPrintHTML(f) {
   </div>`;
 }
 
+/* ---- スケジュール・出欠・結果 ---- */
+function attForEvent(eventId) {
+  const map = {};
+  DB.attendance.forEach(a => { if (a.eventId === eventId) map[a.memberId] = a.status || ''; });
+  return map;
+}
+function attStatus(eventId, memberId) {
+  const a = DB.attendance.find(x => x.id === eventId + '__' + memberId);
+  return a ? (a.status || '') : '';
+}
+function attCounts(eventId) {
+  const map = attForEvent(eventId);
+  const c = { present: 0, absent: 0, maybe: 0, none: 0 };
+  DB.members.forEach(m => {
+    const s = map[m.id] || '';
+    c[s === '' ? 'none' : s]++;
+  });
+  return c;
+}
+function eventDateLabel(e) {
+  if (!e.date) return '日付未定';
+  const d = new Date(e.date + 'T00:00:00');
+  const w = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()] || '';
+  const time = [e.start, e.end].filter(Boolean).join('〜');
+  return `${e.date}（${w}）${time ? '　' + time : ''}`;
+}
+function resultLabel(e) {
+  if (e.type !== 'match' || !e.result || (e.result.us === '' && e.result.them === '')) return '';
+  const us = e.result.us === '' ? '-' : e.result.us;
+  const them = e.result.them === '' ? '-' : e.result.them;
+  let wl = '';
+  if (e.result.us !== '' && e.result.them !== '') {
+    wl = e.result.us > e.result.them ? '○勝ち' : e.result.us < e.result.them ? '●負け' : '△引分';
+  }
+  return `${us} - ${them} ${wl}`.trim();
+}
+function sortedEvents() {
+  return DB.events.slice().sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999') || (a.start || '').localeCompare(b.start || ''));
+}
+
+function scheduleListPrintHTML(events) {
+  const rows = events.map(e => {
+    const c = attCounts(e.id);
+    return `<tr>
+      <td>${esc(eventDateLabel(e))}</td>
+      <td>${esc(EVENT_TYPES[e.type] || '')}</td>
+      <td>${esc(e.title || '')}${e.opponent ? '<br><small>vs ' + esc(e.opponent) + '</small>' : ''}</td>
+      <td>${esc(e.place || '')}</td>
+      <td>${esc(resultLabel(e))}</td>
+      <td>出${c.present}／欠${c.absent}／未定${c.maybe}</td>
+    </tr>`;
+  }).join('');
+  return `<div class="p-doc">
+    <h1 class="p-title">スケジュール一覧</h1>
+    <table class="p-table wide">
+      <thead><tr><th>日時</th><th>種別</th><th>内容</th><th>場所</th><th>結果</th><th>出欠</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6">予定はありません</td></tr>'}</tbody>
+    </table>
+    <div class="p-foot">サッカーコーチノートで作成</div>
+  </div>`;
+}
+
+function eventSheetPrintHTML(e) {
+  const rows = DB.members.map((m, i) => {
+    const s = attStatus(e.id, m.id);
+    return `<tr>
+      <td>${i + 1}</td>
+      <td>${esc(m.name)}</td>
+      <td>${esc(m.grade || '')}</td>
+      <td class="att-cell">${ATT_STATES[s] ? ATT_STATES[s].mark : '−'}</td>
+      <td></td>
+    </tr>`;
+  }).join('');
+  const c = attCounts(e.id);
+  let result = '';
+  if (e.type === 'match') {
+    const r = e.result || {};
+    result = `<div class="p-desc"><b>結果</b>　${esc(resultLabel(e) || '未記録')}${r.memo ? '<br>' + nl2br(r.memo) : ''}</div>`;
+  }
+  return `<div class="p-doc">
+    <h1 class="p-title">${esc(EVENT_TYPES[e.type] || '')}　${esc(e.title || '')}</h1>
+    <div class="p-meta">${esc(eventDateLabel(e))}${e.place ? '　場所：' + esc(e.place) : ''}${e.opponent ? '　対戦：' + esc(e.opponent) : ''}</div>
+    ${e.note ? `<div class="p-note">${nl2br(e.note)}</div>` : ''}
+    ${result}
+    <div class="p-desc"><b>参加状況</b>　出席 ${c.present}名／欠席 ${c.absent}名／未定 ${c.maybe}名／未回答 ${c.none}名</div>
+    <table class="p-table wide">
+      <thead><tr><th>No.</th><th>名前</th><th>学年</th><th>出欠</th><th>メモ</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="5">メンバーが登録されていません</td></tr>'}</tbody>
+    </table>
+    <div class="p-foot">○出席／×欠席／△未定　・　サッカーコーチノートで作成</div>
+  </div>`;
+}
+
+function rosterPrintHTML() {
+  const rows = DB.members.map((m, i) =>
+    `<tr><td>${i + 1}</td><td>${esc(m.number || '')}</td><td>${esc(m.name)}</td><td>${esc(m.grade || '')}</td><td>${esc(m.note || '')}</td></tr>`
+  ).join('');
+  return `<div class="p-doc">
+    <h1 class="p-title">メンバー名簿</h1>
+    <div class="p-meta">全 ${DB.members.length} 名</div>
+    <table class="p-table wide">
+      <thead><tr><th>No.</th><th>背番号</th><th>名前</th><th>学年</th><th>メモ</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="5">メンバーが登録されていません</td></tr>'}</tbody>
+    </table>
+    <div class="p-foot">サッカーコーチノートで作成</div>
+  </div>`;
+}
+
 /* =========================================================
  * タブ切り替え
  * ======================================================= */
@@ -287,6 +445,8 @@ function showTab(name) {
   if (name === 'drills') renderDrills();
   if (name === 'board') renderBoardList();
   if (name === 'formation') renderFormationList();
+  if (name === 'schedule') renderSchedule();
+  if (name === 'roster') renderRoster();
   if (name === 'data') renderDataTab();
 }
 
@@ -871,7 +1031,8 @@ function initFormationTab() {
  * ======================================================= */
 function renderDataTab() {
   byId('data-stats').innerHTML =
-    `登録データ：ドリル <b>${DB.drills.length}</b> 件　／　練習メニュー <b>${DB.menus.length}</b> 件　／　戦術ボード <b>${DB.boards.length}</b> 件　／　ポジション表 <b>${DB.formations.length}</b> 件`;
+    `登録データ：ドリル <b>${DB.drills.length}</b> 件　／　練習メニュー <b>${DB.menus.length}</b> 件　／　戦術ボード <b>${DB.boards.length}</b> 件　／　ポジション表 <b>${DB.formations.length}</b> 件` +
+    `　／　メンバー <b>${DB.members.length}</b> 名　／　予定 <b>${DB.events.length}</b> 件`;
 }
 
 function initDataTab() {
@@ -897,6 +1058,7 @@ function initDataTab() {
           DB = normalizeDB(obj.data);
           currentMenuId = null;
           currentBoardId = null;
+          currentEventId = null;
           saveDB();
           renderDataTab();
           alert('データを読み込みました。');
@@ -907,6 +1069,13 @@ function initDataTab() {
           saveDB();
           renderDataTab();
           alert(`メニュー「${obj.menu.title || ''}」を取り込みました。`);
+        } else if (obj && obj.kind === 'schedule') {
+          (obj.members || []).forEach(m => upsert(DB.members, m));
+          (obj.events || []).forEach(ev => upsert(DB.events, ev));
+          (obj.attendance || []).forEach(a => upsert(DB.attendance, a));
+          saveDB();
+          renderDataTab();
+          alert('スケジュールを取り込みました。');
         } else {
           alert('このアプリで書き出したJSONファイルを選んでください。');
         }
@@ -923,6 +1092,7 @@ function initDataTab() {
     DB = seedDB();
     currentMenuId = null;
     currentBoardId = null;
+    currentEventId = null;
     saveDB();
     renderDataTab();
     alert('初期状態に戻しました。');
@@ -932,6 +1102,318 @@ function initDataTab() {
 function upsert(arr, item) {
   const i = arr.findIndex(x => x.id === item.id);
   if (i >= 0) arr[i] = item; else arr.push(item);
+}
+
+/* =========================================================
+ * メンバー（名簿）
+ * ======================================================= */
+let editingMemberId = null;
+
+function renderRoster() {
+  const list = byId('roster-list');
+  const canE = canEdit();
+  byId('roster-new').classList.toggle('hidden', !canE);
+  list.innerHTML = DB.members.map(m => `
+    <div class="card member-card">
+      <div class="member-main">
+        <span class="member-num">${m.number ? '#' + esc(m.number) : ''}</span>
+        <b>${esc(m.name)}</b>
+        <span class="tag">${esc(m.grade || '学年未設定')}</span>
+      </div>
+      ${m.note ? `<div class="drill-card-meta">${esc(m.note)}</div>` : ''}
+      ${canE ? `<div class="btn-row">
+        <button class="btn small member-edit" data-id="${m.id}">✎ 編集</button>
+        <button class="btn small danger member-del" data-id="${m.id}">削除</button>
+      </div>` : ''}
+    </div>`).join('') || `<p class="hint">${canE ? '「＋ メンバーを追加」から選手を登録できます。' : 'メンバーはまだ登録されていません。'}</p>`;
+}
+
+function openMemberForm(m) {
+  editingMemberId = m ? m.id : null;
+  byId('member-form-title').textContent = m ? 'メンバーを編集' : '新しいメンバー';
+  byId('mf-name').value = m?.name || '';
+  byId('mf-grade').value = m?.grade || GRADES[0];
+  byId('mf-number').value = m?.number || '';
+  byId('mf-note').value = m?.note || '';
+  byId('mf-delete').classList.toggle('hidden', !m);
+  byId('member-form').classList.remove('hidden');
+  byId('member-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function initRosterTab() {
+  byId('roster-new').addEventListener('click', () => openMemberForm(null));
+  byId('roster-print').addEventListener('click', () => printHTML(rosterPrintHTML(), false));
+  byId('roster-list').addEventListener('click', e => {
+    const edit = e.target.closest('.member-edit');
+    const del = e.target.closest('.member-del');
+    if (edit) {
+      openMemberForm(DB.members.find(m => m.id === edit.dataset.id));
+    } else if (del) {
+      const m = DB.members.find(x => x.id === del.dataset.id);
+      if (m && confirm(`「${m.name}」を名簿から削除しますか？`)) {
+        DB.members = DB.members.filter(x => x.id !== m.id);
+        DB.attendance = DB.attendance.filter(a => a.memberId !== m.id);
+        saveDB();
+        renderRoster();
+      }
+    }
+  });
+  byId('mf-save').addEventListener('click', () => {
+    const name = byId('mf-name').value.trim();
+    if (!name) { alert('名前を入力してください'); return; }
+    const data = {
+      name,
+      grade: byId('mf-grade').value,
+      number: byId('mf-number').value.trim(),
+      note: byId('mf-note').value.trim(),
+    };
+    if (editingMemberId) {
+      const m = DB.members.find(x => x.id === editingMemberId);
+      if (m) Object.assign(m, data);
+    } else {
+      DB.members.push(Object.assign({ id: uid('p'), userId: '' }, data));
+    }
+    saveDB();
+    byId('member-form').classList.add('hidden');
+    renderRoster();
+  });
+  byId('mf-cancel').addEventListener('click', () => byId('member-form').classList.add('hidden'));
+  byId('mf-delete').addEventListener('click', () => {
+    if (!editingMemberId) return;
+    const m = DB.members.find(x => x.id === editingMemberId);
+    if (m && confirm(`「${m.name}」を名簿から削除しますか？`)) {
+      DB.members = DB.members.filter(x => x.id !== m.id);
+      DB.attendance = DB.attendance.filter(a => a.memberId !== m.id);
+      saveDB();
+      byId('member-form').classList.add('hidden');
+      renderRoster();
+    }
+  });
+}
+
+/* =========================================================
+ * スケジュール（練習・試合／出欠／結果）
+ * ======================================================= */
+let currentEventId = null;
+
+function currentEvent() {
+  return DB.events.find(e => e.id === currentEventId) || null;
+}
+
+function renderSchedule() {
+  const canE = canEdit();
+  byId('event-new').classList.toggle('hidden', !canE);
+  const todayStr = futureDate(0);
+  const list = byId('event-list');
+  list.innerHTML = sortedEvents().map(e => {
+    const past = (e.date || '') && e.date < todayStr;
+    const c = attCounts(e.id);
+    return `<button class="event-chip ${e.id === currentEventId ? 'active' : ''} ${past ? 'past' : ''} type-${e.type}" data-id="${e.id}">
+      <span class="ev-date">${esc(eventDateLabel(e))}</span>
+      <span class="ev-title"><span class="ev-badge">${esc(EVENT_TYPES[e.type] || '')}</span>${esc(e.title || '（無題）')}</span>
+      <span class="ev-sub">${e.place ? esc(e.place) : ''}${resultLabel(e) ? '　結果 ' + esc(resultLabel(e)) : ''}　<span class="ev-att">出${c.present}/欠${c.absent}/未定${c.maybe}</span></span>
+    </button>`;
+  }).join('') || '<p class="hint">予定はまだありません。</p>';
+  const detail = byId('event-detail');
+  detail.classList.toggle('hidden', !currentEventId);
+  if (currentEventId) renderEventDetail();
+}
+
+function renderEventDetail() {
+  const e = currentEvent();
+  if (!e) { byId('event-detail').classList.add('hidden'); return; }
+  const canE = canEdit();
+
+  const menu = DB.menus.find(m => m.id === e.menuId);
+  const info = [
+    `<span class="ev-badge type-${e.type}">${esc(EVENT_TYPES[e.type] || '')}</span>`,
+    esc(eventDateLabel(e)),
+    e.place ? '📍' + esc(e.place) : '',
+    e.opponent ? '🆚' + esc(e.opponent) : '',
+  ].filter(Boolean).join('　');
+
+  let result = '';
+  if (e.type === 'match') {
+    const r = e.result || { us: '', them: '', memo: '' };
+    result = `<div class="ev-result">
+      <h4>試合結果</h4>
+      ${canE ? `<div class="score-row">
+        <span>自チーム</span>
+        <input id="ev-us" type="number" min="0" max="99" inputmode="numeric" value="${esc(r.us ?? '')}">
+        <span>-</span>
+        <input id="ev-them" type="number" min="0" max="99" inputmode="numeric" value="${esc(r.them ?? '')}">
+        <span>相手</span>
+      </div>
+      <textarea id="ev-memo" rows="2" placeholder="試合の振り返り・得点者など">${esc(r.memo || '')}</textarea>
+      <button id="ev-save-result" class="btn small primary">結果を保存</button>`
+      : `<p class="score-view">${esc(resultLabel(e) || '結果は未記録です')}</p>${r.memo ? `<p>${nl2br(r.memo)}</p>` : ''}`}
+    </div>`;
+  }
+
+  const c = attCounts(e.id);
+  const rows = DB.members.map(m => {
+    const s = attStatus(e.id, m.id);
+    const mine = m.id === myMemberId();
+    const editable = canMarkAttendance(m.id);
+    const btns = Object.keys(ATT_STATES).filter(k => k !== '').map(k =>
+      `<button class="att-btn ${ATT_STATES[k].cls} ${s === k ? 'on' : ''}" data-mid="${m.id}" data-st="${k}" ${editable ? '' : 'disabled'}>${ATT_STATES[k].mark}${ATT_STATES[k].label}</button>`
+    ).join('');
+    return `<div class="att-row ${mine ? 'mine' : ''}">
+      <span class="att-name">${m.number ? '#' + esc(m.number) + ' ' : ''}${esc(m.name)}<small>${esc(m.grade || '')}</small>${mine ? '<span class="you">あなた</span>' : ''}</span>
+      <span class="att-btns">${btns}</span>
+    </div>`;
+  }).join('') || '<p class="hint">「メンバー」タブで選手を登録すると出欠をつけられます。</p>';
+
+  byId('event-detail').innerHTML = `
+    <div class="event-head">
+      <h3>${esc(e.title || '（無題）')}</h3>
+      <div id="event-edit-btns" class="btn-row ${canE ? '' : 'hidden'}">
+        <button id="ev-edit" class="btn small">✎ 編集</button>
+        <button id="ev-print" class="btn small">🖨 出欠表</button>
+        <button id="ev-del" class="btn small danger">削除</button>
+      </div>
+    </div>
+    <div class="ev-info">${info}</div>
+    ${e.note ? `<div class="ev-note">${nl2br(e.note)}</div>` : ''}
+    ${menu ? `<div class="ev-note">📋 練習メニュー：<b>${esc(menu.title)}</b></div>` : ''}
+    ${result}
+    <div class="att-block">
+      <h4>参加状況　<small>出席 ${c.present}／欠席 ${c.absent}／未定 ${c.maybe}／未回答 ${c.none}</small></h4>
+      ${isPlayer() ? '<p class="hint">自分の欄をタップして出欠を回答してください。</p>' : ''}
+      <div id="att-rows">${rows}</div>
+    </div>`;
+
+  bindEventDetail();
+}
+
+function bindEventDetail() {
+  const e = currentEvent();
+  if (!e) return;
+  const editBtns = byId('event-edit-btns');
+  if (editBtns) {
+    const ed = byId('ev-edit'); if (ed) ed.onclick = () => openEventForm(e);
+    const pr = byId('ev-print'); if (pr) pr.onclick = () => printHTML(eventSheetPrintHTML(e), false);
+    const dl = byId('ev-del'); if (dl) dl.onclick = () => {
+      if (confirm(`「${e.title || ''}」を削除しますか？`)) {
+        DB.events = DB.events.filter(x => x.id !== e.id);
+        DB.attendance = DB.attendance.filter(a => a.eventId !== e.id);
+        currentEventId = null;
+        saveDB();
+        renderSchedule();
+      }
+    };
+  }
+  const sr = byId('ev-save-result');
+  if (sr) sr.onclick = () => {
+    const us = byId('ev-us').value;
+    const them = byId('ev-them').value;
+    e.result = {
+      us: us === '' ? '' : Math.max(0, parseInt(us, 10) || 0),
+      them: them === '' ? '' : Math.max(0, parseInt(them, 10) || 0),
+      memo: byId('ev-memo').value.trim(),
+    };
+    saveDB();
+    renderSchedule();
+  };
+  const rows = byId('att-rows');
+  if (rows) rows.addEventListener('click', ev => {
+    const b = ev.target.closest('.att-btn');
+    if (!b || b.disabled) return;
+    const mid = b.dataset.mid;
+    if (!canMarkAttendance(mid)) return;
+    setAttendance(e.id, mid, b.dataset.st);
+  });
+}
+
+function setAttendance(eventId, memberId, status) {
+  const id = eventId + '__' + memberId;
+  let a = DB.attendance.find(x => x.id === id);
+  const cur = a ? a.status : '';
+  const next = (cur === status) ? '' : status; // 同じボタンで解除
+  if (!a) {
+    a = { id, eventId, memberId, status: next, by: (window.TEAM_USER && window.TEAM_USER.name) || '' };
+    DB.attendance.push(a);
+  } else {
+    a.status = next;
+    a.by = (window.TEAM_USER && window.TEAM_USER.name) || a.by || '';
+  }
+  saveDB();
+  renderEventDetail();
+  // 一覧の集計も更新
+  const chip = byId('event-list').querySelector(`.event-chip[data-id="${eventId}"] .ev-att`);
+  if (chip) { const c = attCounts(eventId); chip.textContent = `出${c.present}/欠${c.absent}/未定${c.maybe}`; }
+}
+
+function openEventForm(e) {
+  const isNew = !e;
+  const ev = e || { id: uid('e'), type: 'practice', title: '', date: futureDate(0), start: '', end: '', place: '', opponent: '', note: '', menuId: '', result: null };
+  byId('event-form-title').textContent = isNew ? '新しい予定' : '予定を編集';
+  byId('ef-type').value = ev.type;
+  byId('ef-title').value = ev.title;
+  byId('ef-date').value = ev.date;
+  byId('ef-start').value = ev.start;
+  byId('ef-end').value = ev.end;
+  byId('ef-place').value = ev.place;
+  byId('ef-opponent').value = ev.opponent;
+  byId('ef-note').value = ev.note;
+  byId('ef-menu').innerHTML = '<option value="">（なし）</option>' +
+    DB.menus.map(m => `<option value="${m.id}"${m.id === ev.menuId ? ' selected' : ''}>${esc(m.title || '（無題）')}</option>`).join('');
+  byId('event-form').dataset.id = ev.id;
+  byId('event-form').dataset.new = isNew ? '1' : '';
+  updateEventFormType();
+  byId('event-form').classList.remove('hidden');
+  byId('event-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function updateEventFormType() {
+  byId('ef-opponent-wrap').classList.toggle('hidden', byId('ef-type').value !== 'match');
+}
+
+function initScheduleTab() {
+  byId('event-new').addEventListener('click', () => openEventForm(null));
+  byId('schedule-print').addEventListener('click', () => printHTML(scheduleListPrintHTML(sortedEvents()), true));
+  byId('schedule-export').addEventListener('click', () => {
+    downloadJSON(
+      { app: 'soccer-coach-note', version: 1, kind: 'schedule', events: DB.events, attendance: DB.attendance, members: DB.members },
+      `スケジュール_${today()}.json`
+    );
+  });
+  byId('event-list').addEventListener('click', e => {
+    const b = e.target.closest('.event-chip');
+    if (!b) return;
+    currentEventId = b.dataset.id;
+    renderSchedule();
+    byId('event-detail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+  byId('ef-type').addEventListener('change', updateEventFormType);
+  byId('ef-save').addEventListener('click', () => {
+    const form = byId('event-form');
+    const id = form.dataset.id;
+    const title = byId('ef-title').value.trim();
+    if (!title) { alert('内容（タイトル）を入力してください'); return; }
+    const type = byId('ef-type').value;
+    const data = {
+      type, title,
+      date: byId('ef-date').value,
+      start: byId('ef-start').value,
+      end: byId('ef-end').value,
+      place: byId('ef-place').value.trim(),
+      opponent: type === 'match' ? byId('ef-opponent').value.trim() : '',
+      note: byId('ef-note').value.trim(),
+      menuId: byId('ef-menu').value,
+    };
+    const existing = DB.events.find(x => x.id === id);
+    if (existing) {
+      Object.assign(existing, data);
+    } else {
+      DB.events.push(Object.assign({ id, result: null }, data));
+    }
+    currentEventId = id;
+    saveDB();
+    form.classList.add('hidden');
+    renderSchedule();
+  });
+  byId('ef-cancel').addEventListener('click', () => byId('event-form').classList.add('hidden'));
 }
 
 /* =========================================================
@@ -947,15 +1429,23 @@ window.applyExternalDB = function (newDb) {
   if (currentMenuId && !DB.menus.some(m => m.id === currentMenuId)) currentMenuId = null;
   if (currentBoardId && !DB.boards.some(b => b.id === currentBoardId)) currentBoardId = null;
   if (FM.id && !DB.formations.some(f => f.id === FM.id)) FM.id = null;
+  if (currentEventId && !DB.events.some(e => e.id === currentEventId)) currentEventId = null;
   const active = document.querySelector('.tab-btn.active');
   showTab(active ? active.dataset.tab : 'menus');
 };
+
+/** 権限に応じて画面の表示・初期タブを整える（チーム共有版で呼ばれる）*/
+function applyRoleUI() {
+  document.body.classList.toggle('role-player', isPlayer());
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
   let loaded = null;
   try { loaded = await store().load(); } catch (e) { console.warn('初期データの読み込みに失敗:', e); }
   DB = normalizeDB(loaded || seedDB());
   if (!loaded) saveDB();
+
+  applyRoleUI();
 
   document.querySelector('.tabs').addEventListener('click', e => {
     const b = e.target.closest('.tab-btn');
@@ -965,13 +1455,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   fillSelect('menu-age', [''].concat(AGE_GROUPS));
   fillSelect('df-category', CATEGORIES);
   fillSelect('df-age', AGE_GROUPS);
+  fillSelect('mf-grade', GRADES);
 
   initMenusTab();
   initDrillsTab();
   initBoardTab();
   initFormationTab();
+  initScheduleTab();
+  initRosterTab();
   initDataTab();
 
   if (DB.menus.length) currentMenuId = DB.menus[0].id;
-  showTab('menus');
+  // プレイヤーはまずスケジュール（出欠回答）を開く
+  showTab(isPlayer() ? 'schedule' : 'menus');
 });

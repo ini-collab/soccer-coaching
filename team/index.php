@@ -23,8 +23,17 @@ $html = str_replace('src="js/', 'src="../js/', $html);
 $html = str_replace('<title>サッカーコーチノート</title>', '<title>サッカーコーチノート（チーム共有版）</title>', $html);
 
 // ユーザー情報・CSRF・同期スクリプトを注入
+$role = ($user['role'] ?? 'coach') === 'player' ? 'player' : 'coach';
 $inject = '<script>'
-    . 'window.TEAM_USER=' . json_encode(['name' => $user['name'], 'email' => $user['email']], JSON_UNESCAPED_UNICODE) . ';'
+    . 'window.TEAM_USER=' . json_encode([
+        'name' => $user['name'],
+        'email' => $user['email'],
+        'role' => $role,
+        'grade' => $user['grade'] ?? '',
+        'memberId' => $user['member_id'] ?? '',
+    ], JSON_UNESCAPED_UNICODE) . ';'
+    . 'window.APP_ROLE=' . json_encode($role) . ';'
+    . 'window.APP_MEMBER_ID=' . json_encode($user['member_id'] ?? '') . ';'
     . 'window.CSRF_TOKEN=' . json_encode(csrf_token()) . ';'
     . '</script>' . "\n"
     . '<script src="js/remote.js"></script>' . "\n";

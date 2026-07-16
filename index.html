@@ -18,6 +18,8 @@
       <button class="tab-btn" data-tab="drills">🏃 ドリル集</button>
       <button class="tab-btn" data-tab="board">🧠 戦術ボード</button>
       <button class="tab-btn" data-tab="formation">🧩 ポジション</button>
+      <button class="tab-btn" data-tab="schedule">📅 スケジュール</button>
+      <button class="tab-btn" data-tab="roster">👥 メンバー</button>
       <button class="tab-btn" data-tab="data">💾 データ</button>
     </nav>
   </header>
@@ -164,6 +166,76 @@
       </div>
     </section>
 
+    <!-- ============ スケジュール ============ -->
+    <section id="tab-schedule" class="tab">
+      <div class="pane-head">
+        <h2>スケジュール（練習・試合・出欠・結果）</h2>
+        <div class="btn-row" style="margin-top:0">
+          <button id="event-new" class="btn primary coach-only">＋ 新しい予定</button>
+          <button id="schedule-print" class="btn">🖨 一覧を印刷</button>
+          <button id="schedule-export" class="btn">📤 JSON書き出し</button>
+        </div>
+      </div>
+
+      <div id="event-form" class="card hidden coach-only" data-id="" data-new="">
+        <h3 id="event-form-title">新しい予定</h3>
+        <div class="form-grid">
+          <label>種別
+            <select id="ef-type">
+              <option value="practice">練習</option>
+              <option value="match">試合</option>
+              <option value="other">その他</option>
+            </select>
+          </label>
+          <label>内容・タイトル<input id="ef-title" placeholder="例：土曜練習／練習試合 vs ○○FC"></label>
+          <label>日付<input id="ef-date" type="date"></label>
+          <label>開始<input id="ef-start" type="time"></label>
+          <label>終了<input id="ef-end" type="time"></label>
+          <label>場所<input id="ef-place" placeholder="例：第2グラウンド"></label>
+          <label id="ef-opponent-wrap">対戦相手<input id="ef-opponent" placeholder="例：さくらFC"></label>
+          <label>練習メニュー<select id="ef-menu"></select></label>
+        </div>
+        <label class="block">メモ・連絡事項<textarea id="ef-note" rows="2" placeholder="集合時間・持ち物など"></textarea></label>
+        <div class="btn-row end">
+          <button id="ef-save" class="btn primary">保存</button>
+          <button id="ef-cancel" class="btn">キャンセル</button>
+        </div>
+      </div>
+
+      <div class="schedule-layout">
+        <div id="event-list" class="event-list"></div>
+        <div id="event-detail" class="card hidden"></div>
+      </div>
+    </section>
+
+    <!-- ============ メンバー ============ -->
+    <section id="tab-roster" class="tab">
+      <div class="pane-head">
+        <h2>メンバー（名簿）</h2>
+        <div class="btn-row" style="margin-top:0">
+          <button id="roster-new" class="btn primary coach-only">＋ メンバーを追加</button>
+          <button id="roster-print" class="btn">🖨 名簿を印刷</button>
+        </div>
+      </div>
+
+      <div id="member-form" class="card hidden coach-only">
+        <h3 id="member-form-title">新しいメンバー</h3>
+        <div class="form-grid">
+          <label>名前<input id="mf-name" placeholder="例：たろう"></label>
+          <label>学年<select id="mf-grade"></select></label>
+          <label>背番号<input id="mf-number" inputmode="numeric" placeholder="例：7"></label>
+          <label>メモ<input id="mf-note" placeholder="例：ポジションGK・保護者連絡先など"></label>
+        </div>
+        <div class="btn-row end">
+          <button id="mf-save" class="btn primary">保存</button>
+          <button id="mf-cancel" class="btn">キャンセル</button>
+          <button id="mf-delete" class="btn danger hidden">削除</button>
+        </div>
+      </div>
+
+      <div id="roster-list" class="drill-grid"></div>
+    </section>
+
     <!-- ============ データ管理 ============ -->
     <section id="tab-data" class="tab">
       <h2>データ管理</h2>
@@ -171,9 +243,9 @@
         <p id="data-stats"></p>
         <div class="btn-row">
           <button id="data-export" class="btn primary">📤 全データを書き出す（JSON）</button>
-          <button id="data-import" class="btn">📥 データを読み込む</button>
+          <button id="data-import" class="btn coach-only">📥 データを読み込む</button>
           <input type="file" id="data-file" accept=".json,application/json" hidden>
-          <button id="data-reset" class="btn danger">🗑 全データを削除（初期化）</button>
+          <button id="data-reset" class="btn danger coach-only">🗑 全データを削除（初期化）</button>
         </div>
         <p class="hint">
           ・データはこの端末のブラウザ内に自動保存されます。<br>

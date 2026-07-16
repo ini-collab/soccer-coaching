@@ -7,19 +7,23 @@
  *  - 約20秒ごとに他メンバーの変更を取得して画面へ反映
  * ======================================================= */
 (function () {
-  const KINDS = ['drills', 'menus', 'boards', 'formations'];
+  const KINDS = ['drills', 'menus', 'boards', 'formations', 'members', 'events', 'attendance'];
   const clone = o => JSON.parse(JSON.stringify(o));
-  const emptyDB = () => ({ drills: [], menus: [], boards: [], formations: [] });
+  const emptyDB = () => ({ drills: [], menus: [], boards: [], formations: [], members: [], events: [], attendance: [] });
   const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, c => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ));
 
   let snapshot = emptyDB();  // サーバーと同期済みの状態
-  let current = null;        // アプリの現在のDB（app.jsのDBへの参照）
+  let started = false;       // 初期ロード完了後にtrue（それまで同期しない）
   let lastTs = 0;            // 差分取得用タイムスタンプ
   let syncTimer = null;
   let syncing = false;
   let queued = false;
+  let pollSoon = false;
+
+  // アプリの現在のDB（app.js の生の参照）。ロード完了後は常に取得できる
+  const cur = () => (started && window.getAppDB ? window.getAppDB() : null);
 
   function setStatus(text, isError) {
     const el = document.getElementById('sync-status');
@@ -47,14 +51,16 @@
     return j;
   }
 
-  /* snapshotとcurrentを比較して差分（upsert/delete）を作る */
+  /* snapshotと現在のDBを比較して差分（upsert/delete）を作る */
   function diff() {
+    const db = cur();
     const upserts = {}, deletes = {};
     let any = false;
+    if (!db) return { upserts, deletes, any };
     KINDS.forEach(k => {
       const olds = new Map((snapshot[k] || []).map(x => [x.id, JSON.stringify(x)]));
       const news = new Map();
-      (current[k] || []).forEach(x => { if (x && x.id) news.set(x.id, x); });
+      (db[k] || []).forEach(x => { if (x && x.id) news.set(x.id, x); });
       news.forEach((item, id) => {
         if (olds.get(id) !== JSON.stringify(item)) {
           (upserts[k] = upserts[k] || []).push(item);
@@ -72,7 +78,7 @@
   }
 
   function isDirty() {
-    return !!current && diff().any;
+    return !!cur() && diff().any;
   }
 
   function schedule() {
@@ -81,17 +87,20 @@
   }
 
   async function doSync() {
-    if (!current) return;
+    const db = cur();
+    if (!db) return;
     if (syncing) { queued = true; return; }
     const d = diff();
     if (!d.any) { setStatus('同期済み ✓'); return; }
     syncing = true;
     setStatus('保存中…');
     try {
-      const r = await api('POST', null, { upserts: d.upserts, deletes: d.deletes });
-      snapshot = clone(current);
-      lastTs = Math.max(lastTs, r.ts || 0);
+      await api('POST', null, { upserts: d.upserts, deletes: d.deletes });
+      snapshot = clone(db);
       setStatus('同期済み ✓');
+      // lastTs は POST 応答では進めない。この間に他メンバーが加えた変更を
+      // 取りこぼさないよう、送信直後にポーリングで追いつく。
+      pollSoon = true;
     } catch (e) {
       setStatus('⚠ 通信エラー（自動で再試行します）', true);
       clearTimeout(syncTimer);
@@ -99,12 +108,14 @@
     } finally {
       syncing = false;
       if (queued) { queued = false; schedule(); }
+      if (pollSoon) { pollSoon = false; poll(); }
     }
   }
 
   /* 他メンバーの変更を取得して画面に反映する */
   async function poll() {
-    if (!current || syncing || isDirty()) return; // 自分の未送信変更があるときは後回し
+    const db = cur();
+    if (!db || syncing || isDirty()) return; // 自分の未送信変更があるときは後回し
     try {
       const r = await api('GET', { mode: 'changes', since: lastTs });
       lastTs = Math.max(lastTs, r.ts || 0);
@@ -127,12 +138,14 @@
       r.changes.forEach(ch => {
         if (!KINDS.includes(ch.kind)) return;
         if (!ch.deleted && (!ch.item || !ch.item.id)) return;
-        const a = applyTo(current[ch.kind], ch);
+        if (!db[ch.kind]) db[ch.kind] = [];
+        const a = applyTo(db[ch.kind], ch);
+        if (!snapshot[ch.kind]) snapshot[ch.kind] = [];
         applyTo(snapshot[ch.kind], ch);
         changed = changed || a;
       });
       if (changed && window.applyExternalDB) {
-        window.applyExternalDB(current);
+        window.applyExternalDB(db);
         setStatus('他のメンバーの変更を反映しました ✓');
       }
     } catch (e) { /* 次回のポーリングで再試行 */ }
@@ -145,13 +158,13 @@
       const r = await api('GET', { mode: 'full' });
       lastTs = r.ts || 0;
       snapshot = clone(r.data || emptyDB());
+      started = true; // これ以降 getAppDB() が有効になる
       setStatus('同期済み ✓');
       // まだ誰も使っていないサーバーならnullを返し、app.js側でサンプルデータを投入
       if (!r.initialized) return null;
       return r.data;
     },
-    save(db) {
-      current = db;
+    save() {
       setStatus('保存中…');
       schedule();
     },
@@ -175,11 +188,15 @@
   document.addEventListener('DOMContentLoaded', () => {
     const h1 = document.querySelector('.app-header h1');
     if (h1 && window.TEAM_USER) {
+      const u = window.TEAM_USER;
+      const roleLabel = u.role === 'player'
+        ? 'プレイヤー' + (u.grade ? '・' + escapeHtml(u.grade) : '')
+        : 'コーチ';
       const el = document.createElement('span');
       el.className = 'user-chip';
       el.innerHTML =
         `<span id="sync-status" title="タップで今すぐ同期"></span>　` +
-        `👤 ${escapeHtml(window.TEAM_USER.name)}　` +
+        `👤 ${escapeHtml(u.name)}<span class="role-tag">${roleLabel}</span>　` +
         `<a href="logout.php">ログアウト</a>`;
       h1.appendChild(el);
       el.querySelector('#sync-status').addEventListener('click', () => { doSync(); poll(); });

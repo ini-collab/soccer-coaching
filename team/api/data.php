@@ -10,8 +10,10 @@
 require __DIR__ . '/../inc/bootstrap.php';
 
 $user = require_login_api();
-$KINDS = ['drills', 'menus', 'boards', 'formations'];
+$KINDS = ['drills', 'menus', 'boards', 'formations', 'members', 'events', 'attendance'];
 $pdo = db();
+$isPlayer = (($user['role'] ?? 'coach') === 'player');
+$myMemberId = (string)($user['member_id'] ?? '');
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $mode = $_GET['mode'] ?? 'full';
@@ -74,6 +76,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         json_out(['ok' => false, 'error' => 'bad_json'], 400);
     }
 
+    /* プレイヤーは「自分の出欠」だけ書き込める。それ以外の書き込み・削除は無視する。
+       （画面側でも編集UIを出さないが、サーバー側でも二重に守る） */
+    $allowUpsert = function (string $kind, array $item) use ($isPlayer, $myMemberId): bool {
+        if (!$isPlayer) {
+            return true;
+        }
+        return $kind === 'attendance'
+            && $myMemberId !== ''
+            && (string)($item['memberId'] ?? '') === $myMemberId;
+    };
+
     // タイムスタンプは単調増加させる（差分取得の取りこぼし防止）
     $now = (int)floor(microtime(true) * 1000);
     $max = (int)$pdo->query('SELECT COALESCE(MAX(updated_at), 0) FROM items')->fetchColumn();
@@ -93,6 +106,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     || $item['id'] === '' || strlen($item['id']) > 64) {
                     continue;
                 }
+                if (!$allowUpsert($k, $item)) {
+                    continue;
+                }
                 $js = json_encode($item, JSON_UNESCAPED_UNICODE);
                 if ($js === false || strlen($js) > 1024 * 1024) {
                     continue;
@@ -102,7 +118,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     break 2;
                 }
             }
-            $dels = $body['deletes'][$k] ?? [];
+            // プレイヤーは削除不可
+            $dels = $isPlayer ? [] : ($body['deletes'][$k] ?? []);
             foreach ((is_array($dels) ? $dels : []) as $id) {
                 if (!is_string($id) || $id === '' || strlen($id) > 64) {
                     continue;

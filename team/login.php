@@ -7,10 +7,13 @@ if (current_user()) {
 }
 
 $err = isset($_GET['err']) ? (string)$_GET['err'] : '';
+$notice = ($_GET['reset'] ?? '') === 'ok' ? 'パスワードを変更しました。新しいパスワードでログインしてください。' : '';
 $mode = ($_GET['mode'] ?? '') === 'register' ? 'register' : 'login';
 $pending = $_SESSION['pending_google'] ?? null;
 $keepEmail = '';
 $keepName = '';
+$keepRole = 'coach';
+$keepGrade = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check_post();
@@ -37,12 +40,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $email = trim((string)($_POST['email'] ?? ''));
         $pass = (string)($_POST['password'] ?? '');
         $invite = (string)($_POST['invite'] ?? '');
-        $keepEmail = $email;
-        $keepName = $name;
-        if (!check_invite($invite)) {
-            $err = 'チーム招待コードが違います。コーチ・代表者に確認してください。';
+        $role = ($_POST['role'] ?? 'coach') === 'player' ? 'player' : 'coach';
+        $grade = trim((string)($_POST['grade'] ?? ''));
+        $keepEmail = $email; $keepName = $name; $keepRole = $role; $keepGrade = $grade;
+        if (!role_registration_allowed($role)) {
+            $err = ($role === 'player')
+                ? 'プレイヤーの登録は現在受け付けていません。コーチにお問い合わせください。'
+                : 'コーチの登録は現在受け付けていません。管理者にお問い合わせください。';
+        } elseif (!check_invite($role, $invite)) {
+            $err = ($role === 'player' ? 'プレイヤー用' : 'コーチ用') . 'の招待コードが違います。チームの代表者に確認してください。';
         } elseif ($name === '') {
             $err = 'お名前（ニックネーム可）を入力してください。';
+        } elseif ($role === 'player' && !in_array($grade, grade_list(), true)) {
+            $err = '学年を選んでください。';
         } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $err = 'メールアドレスの形式が正しくありません。';
         } elseif (strlen($pass) < 8) {
@@ -50,16 +60,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (find_user_by_email($email)) {
             $err = 'このメールアドレスは登録済みです。ログインしてください。';
         } else {
-            $id = create_user($email, $name, password_hash($pass, PASSWORD_DEFAULT), null);
+            $id = create_user($email, $name, password_hash($pass, PASSWORD_DEFAULT), null, $role, $grade);
             login_session($id);
             header('Location: index.php');
             exit;
         }
 
     } elseif ($action === 'google_invite' && $pending) {
-        // Googleログインの新規ユーザー：招待コードの確認
-        if (!check_invite((string)($_POST['invite'] ?? ''))) {
-            $err = 'チーム招待コードが違います。コーチ・代表者に確認してください。';
+        // Googleログインの新規ユーザー：ロール・招待コード（・学年）の確認
+        $role = ($_POST['role'] ?? 'coach') === 'player' ? 'player' : 'coach';
+        $grade = trim((string)($_POST['grade'] ?? ''));
+        $keepRole = $role; $keepGrade = $grade;
+        if (!role_registration_allowed($role)) {
+            $err = ($role === 'player')
+                ? 'プレイヤーの登録は現在受け付けていません。'
+                : 'コーチの登録は現在受け付けていません。';
+        } elseif (!check_invite($role, (string)($_POST['invite'] ?? ''))) {
+            $err = ($role === 'player' ? 'プレイヤー用' : 'コーチ用') . 'の招待コードが違います。';
+        } elseif ($role === 'player' && !in_array($grade, grade_list(), true)) {
+            $err = '学年を選んでください。';
         } else {
             $u = $pending['email'] !== '' ? find_user_by_email($pending['email']) : null;
             if ($u) {
@@ -67,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $id = (int)$u['id'];
             } else {
                 $email = $pending['email'] !== '' ? $pending['email'] : ('google-' . $pending['sub'] . '@login.invalid');
-                $id = create_user($email, $pending['name'], null, $pending['sub']);
+                $id = create_user($email, $pending['name'], null, $pending['sub'], $role, $grade);
             }
             login_session($id);
             header('Location: index.php');
@@ -77,6 +96,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $csrf = csrf_token();
+$gradeOptions = function ($sel) {
+    $o = '<option value="">選択してください</option>';
+    foreach (grade_list() as $g) {
+        $o .= '<option value="' . h($g) . '"' . ($g === $sel ? ' selected' : '') . '>' . h($g) . '</option>';
+    }
+    return $o;
+};
 ?>
 <!DOCTYPE html>
 <html lang="ja">
@@ -101,12 +127,22 @@ $csrf = csrf_token();
   button { width: 100%; margin-top: 18px; min-height: 50px; font: inherit; font-weight: 700; border: none; border-radius: 12px; background: #1c7c44; color: #fff; cursor: pointer; font-size: 16px; }
   button:active { transform: scale(.98); }
   .g-btn { background: #fff; color: #333; border: 1.5px solid #dbe3d7; display: flex; align-items: center; justify-content: center; gap: 10px; }
+  select { width: 100%; font: inherit; border: 1.5px solid #dbe3d7; border-radius: 10px; padding: 12px; min-height: 48px; background: #fff; }
   .err { background: #fdeaea; color: #b03030; border: 1px solid #f2c7c7; border-radius: 10px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; line-height: 1.7; }
+  .notice { background: #e7f5ec; color: #1c6c3c; border: 1px solid #b9e0c7; border-radius: 10px; padding: 10px 12px; font-size: 13px; margin-bottom: 12px; line-height: 1.7; }
   .switch { text-align: center; font-size: 13px; margin-top: 16px; }
   .switch a { color: #1c7c44; font-weight: 700; }
   .or { display: flex; align-items: center; gap: 10px; color: #999; font-size: 12px; margin: 18px 0 0; }
   .or::before, .or::after { content: ""; flex: 1; height: 1px; background: #e2e8de; }
   .note { font-size: 12px; color: #5c6b57; margin-top: 6px; line-height: 1.7; }
+  .roles { display: flex; gap: 8px; margin-top: 6px; }
+  .roles label { flex: 1; margin: 0; border: 1.5px solid #dbe3d7; border-radius: 10px; padding: 10px; text-align: center; cursor: pointer; font-weight: 700; }
+  .roles input { display: none; }
+  .roles input:checked + span { color: #1c7c44; }
+  .roles label:has(input:checked) { border-color: #1c7c44; background: #edf6ef; box-shadow: 0 0 0 1.5px #1c7c44; }
+  .roles small { display: block; font-weight: 500; font-size: 11px; color: #5c6b57; margin-top: 2px; }
+  .forgot { text-align: right; font-size: 12px; margin-top: 8px; }
+  .forgot a { color: #5c6b57; }
 </style>
 </head>
 <body>
@@ -114,34 +150,51 @@ $csrf = csrf_token();
   <h1>⚽ サッカーコーチノート</h1>
   <p class="sub">チーム共有版 ─ 練習メニュー・戦術・ポジションをコーチみんなで共有</p>
 
+  <?php if ($notice !== ''): ?><div class="notice"><?= h($notice) ?></div><?php endif; ?>
   <?php if ($err !== ''): ?><div class="err"><?= h($err) ?></div><?php endif; ?>
 
   <?php if ($pending): ?>
-    <!-- Googleログイン：新規メンバーの招待コード確認 -->
-    <p>こんにちは、<b><?= h($pending['name']) ?></b> さん！<br>初めての参加ですね。チーム招待コードを入力してください。</p>
-    <form method="post">
+    <!-- Googleログイン：新規メンバーのロール・招待コード確認 -->
+    <p>こんにちは、<b><?= h($pending['name']) ?></b> さん！<br>初めての参加ですね。区分と招待コードを入力してください。</p>
+    <form method="post" id="reg-form">
       <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
       <input type="hidden" name="action" value="google_invite">
-      <label>チーム招待コード</label>
-      <input name="invite" required autofocus autocomplete="off">
+      <label>区分</label>
+      <div class="roles">
+        <label><input type="radio" name="role" value="coach" <?= $keepRole !== 'player' ? 'checked' : '' ?>><span>コーチ<small>全機能</small></span></label>
+        <label><input type="radio" name="role" value="player" <?= $keepRole === 'player' ? 'checked' : '' ?>><span>プレイヤー<small>参照＋出欠</small></span></label>
+      </div>
+      <div id="grade-wrap" style="display:none">
+        <label>学年</label>
+        <select name="grade"><?= $gradeOptions($keepGrade) ?></select>
+      </div>
+      <label>招待コード</label>
+      <input name="invite" required autocomplete="off">
       <button type="submit">チームに参加する</button>
     </form>
 
   <?php elseif ($mode === 'register'): ?>
-    <form method="post">
+    <form method="post" id="reg-form">
       <input type="hidden" name="csrf" value="<?= h($csrf) ?>">
       <input type="hidden" name="action" value="register">
+      <label>区分</label>
+      <div class="roles">
+        <label><input type="radio" name="role" value="coach" <?= $keepRole !== 'player' ? 'checked' : '' ?>><span>コーチ<small>全機能が使える</small></span></label>
+        <label><input type="radio" name="role" value="player" <?= $keepRole === 'player' ? 'checked' : '' ?>><span>プレイヤー<small>参照＋自分の出欠</small></span></label>
+      </div>
       <label>お名前（表示用）</label>
-      <input name="name" required maxlength="50" placeholder="例：さとうコーチ" value="<?= h($keepName) ?>">
+      <input name="name" required maxlength="50" placeholder="例：さとうコーチ／たろう" value="<?= h($keepName) ?>">
+      <div id="grade-wrap" style="display:none">
+        <label>学年</label>
+        <select name="grade"><?= $gradeOptions($keepGrade) ?></select>
+      </div>
       <label>メールアドレス</label>
       <input name="email" type="email" required autocomplete="email" value="<?= h($keepEmail) ?>">
       <label>パスワード（8文字以上）</label>
       <input name="password" type="password" required minlength="8" autocomplete="new-password">
-      <?php if (invite_required()): ?>
-        <label>チーム招待コード</label>
-        <input name="invite" required autocomplete="off">
-        <p class="note">招待コードはチームの代表者・管理者に確認してください。</p>
-      <?php endif; ?>
+      <label>招待コード</label>
+      <input name="invite" required autocomplete="off">
+      <p class="note">招待コードはチームの代表者・コーチに確認してください。コーチ用とプレイヤー用でコードが異なります。</p>
       <button type="submit">登録してはじめる</button>
     </form>
     <?php if (google_enabled()): ?>
@@ -160,6 +213,7 @@ $csrf = csrf_token();
       <input name="email" type="email" required autocomplete="email" value="<?= h($keepEmail) ?>">
       <label>パスワード</label>
       <input name="password" type="password" required autocomplete="current-password">
+      <p class="forgot"><a href="forgot.php">パスワードをお忘れですか？</a></p>
       <button type="submit">ログイン</button>
     </form>
     <?php if (google_enabled()): ?>
@@ -171,5 +225,22 @@ $csrf = csrf_token();
     <p class="switch">初めての方は <a href="login.php?mode=register">新規登録</a></p>
   <?php endif; ?>
 </div>
+<script>
+  // 区分（コーチ/プレイヤー）で学年欄の表示を切り替え
+  (function () {
+    var form = document.getElementById('reg-form');
+    if (!form) return;
+    var wrap = document.getElementById('grade-wrap');
+    var sel = wrap ? wrap.querySelector('select') : null;
+    function update() {
+      var r = form.querySelector('input[name=role]:checked');
+      var isPlayer = r && r.value === 'player';
+      if (wrap) wrap.style.display = isPlayer ? 'block' : 'none';
+      if (sel) sel.required = !!isPlayer;
+    }
+    form.querySelectorAll('input[name=role]').forEach(function (el) { el.addEventListener('change', update); });
+    update();
+  })();
+</script>
 </body>
 </html>

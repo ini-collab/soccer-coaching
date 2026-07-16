@@ -80,15 +80,9 @@ if (isset($_GET['code'])) {
         header('Location: index.php');
         exit;
     }
-    // 3) 新規メンバー → 招待コードが必要なら確認画面へ
-    if (invite_required()) {
-        $_SESSION['pending_google'] = ['sub' => $sub, 'email' => $email, 'name' => $name];
-        header('Location: login.php');
-        exit;
-    }
-    $id = create_user($email !== '' ? $email : ('google-' . $sub . '@login.invalid'), $name, null, $sub);
-    login_session($id);
-    header('Location: index.php');
+    // 3) 新規メンバー → 区分・招待コードの確認画面へ
+    $_SESSION['pending_google'] = ['sub' => $sub, 'email' => $email, 'name' => $name];
+    header('Location: login.php');
     exit;
 
 } elseif (isset($_GET['error'])) {

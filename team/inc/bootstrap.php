@@ -75,3 +75,27 @@ function csrf_check_post(): void
         exit('不正なリクエストです。ページを開き直してもう一度お試しください。');
     }
 }
+
+/** メール送信（PHP mail()）。設定でenabled=falseなら送らない */
+function send_mail(string $to, string $subject, string $body): bool
+{
+    global $CONFIG;
+    $m = $CONFIG['mail'] ?? [];
+    if (empty($m['enabled'])) {
+        return false;
+    }
+    $from = (string)($m['from'] ?? '');
+    if ($from === '' || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        return false;
+    }
+    $fromName = (string)($m['from_name'] ?? 'サッカーコーチノート');
+    $encName = '=?UTF-8?B?' . base64_encode($fromName) . '?=';
+    $encSubject = '=?UTF-8?B?' . base64_encode($subject) . '?=';
+    $headers = [
+        'From: ' . $encName . ' <' . $from . '>',
+        'MIME-Version: 1.0',
+        'Content-Type: text/plain; charset=UTF-8',
+        'Content-Transfer-Encoding: 8bit',
+    ];
+    return @mail($to, $encSubject, $body, implode("\r\n", $headers), '-f' . $from);
+}

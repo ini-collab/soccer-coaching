@@ -42,14 +42,17 @@ function db(): PDO
 
 function db_init_sqlite(PDO $pdo): void
 {
-    $pdo->exec('CREATE TABLE IF NOT EXISTS users(
+    $pdo->exec("CREATE TABLE IF NOT EXISTS users(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         email TEXT UNIQUE NOT NULL,
         name TEXT NOT NULL,
         pass_hash TEXT,
         google_sub TEXT UNIQUE,
+        role TEXT NOT NULL DEFAULT 'coach',
+        grade TEXT NOT NULL DEFAULT '',
+        member_id TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL
-    )');
+    )");
     $pdo->exec('CREATE TABLE IF NOT EXISTS items(
         kind TEXT NOT NULL,
         id TEXT NOT NULL,
@@ -61,18 +64,28 @@ function db_init_sqlite(PDO $pdo): void
     )');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_items_updated ON items(updated_at)');
     $pdo->exec('CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT)');
+    $pdo->exec('CREATE TABLE IF NOT EXISTS password_resets(
+        token_hash TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        used INTEGER NOT NULL DEFAULT 0
+    )');
+    db_migrate_add_columns($pdo, 'sqlite');
 }
 
 function db_init_mysql(PDO $pdo): void
 {
-    $pdo->exec('CREATE TABLE IF NOT EXISTS users(
+    $pdo->exec("CREATE TABLE IF NOT EXISTS users(
         id INT AUTO_INCREMENT PRIMARY KEY,
         email VARCHAR(190) UNIQUE NOT NULL,
         name VARCHAR(100) NOT NULL,
         pass_hash VARCHAR(255) NULL,
         google_sub VARCHAR(64) NULL UNIQUE,
+        role VARCHAR(16) NOT NULL DEFAULT 'coach',
+        grade VARCHAR(20) NOT NULL DEFAULT '',
+        member_id VARCHAR(64) NOT NULL DEFAULT '',
         created_at VARCHAR(32) NOT NULL
-    ) CHARACTER SET utf8mb4');
+    ) CHARACTER SET utf8mb4");
     $pdo->exec('CREATE TABLE IF NOT EXISTS items(
         kind VARCHAR(20) NOT NULL,
         id VARCHAR(64) NOT NULL,
@@ -84,6 +97,62 @@ function db_init_mysql(PDO $pdo): void
         INDEX idx_items_updated(updated_at)
     ) CHARACTER SET utf8mb4');
     $pdo->exec('CREATE TABLE IF NOT EXISTS meta(k VARCHAR(64) PRIMARY KEY, v TEXT) CHARACTER SET utf8mb4');
+    $pdo->exec('CREATE TABLE IF NOT EXISTS password_resets(
+        token_hash VARCHAR(64) PRIMARY KEY,
+        user_id INT NOT NULL,
+        expires_at BIGINT NOT NULL,
+        used TINYINT NOT NULL DEFAULT 0
+    ) CHARACTER SET utf8mb4');
+    db_migrate_add_columns($pdo, 'mysql');
+}
+
+/** 既存DBに新しい列がなければ追加する（バージョンアップ時の移行）*/
+function db_migrate_add_columns(PDO $pdo, string $driver): void
+{
+    $cols = [
+        'role'      => "VARCHAR(16) NOT NULL DEFAULT 'coach'",
+        'grade'     => "VARCHAR(20) NOT NULL DEFAULT ''",
+        'member_id' => "VARCHAR(64) NOT NULL DEFAULT ''",
+    ];
+    // 既存列の一覧を取得
+    $existing = [];
+    try {
+        if ($driver === 'sqlite') {
+            foreach ($pdo->query('PRAGMA table_info(users)') as $r) {
+                $existing[$r['name']] = true;
+            }
+        } else {
+            foreach ($pdo->query('SHOW COLUMNS FROM users') as $r) {
+                $existing[$r['Field']] = true;
+            }
+        }
+    } catch (Throwable $e) {
+        return;
+    }
+    // 旧バージョンのユーザーは全員コーチなので role の既定は 'coach'
+    foreach ($cols as $name => $def) {
+        if (empty($existing[$name])) {
+            try {
+                $pdo->exec("ALTER TABLE users ADD COLUMN $name $def");
+            } catch (Throwable $e) { /* 既にある等は無視 */ }
+        }
+    }
+}
+
+/** items の updated_at を単調増加させて次の値を返す */
+function next_item_ts(): int
+{
+    $now = (int)floor(microtime(true) * 1000);
+    $max = (int)db()->query('SELECT COALESCE(MAX(updated_at), 0) FROM items')->fetchColumn();
+    return $now <= $max ? $max + 1 : $now;
+}
+
+/** サーバー側から共有データ項目を1件保存する（メンバー自動登録など）*/
+function put_item(string $kind, string $id, array $data, string $by = ''): void
+{
+    $st = db()->prepare('REPLACE INTO items (kind, id, json, deleted, updated_at, updated_by) VALUES (?, ?, ?, 0, ?, ?)');
+    $st->execute([$kind, $id, json_encode($data, JSON_UNESCAPED_UNICODE), next_item_ts(), $by]);
+    set_meta('initialized', '1');
 }
 
 function get_meta(string $k): ?string

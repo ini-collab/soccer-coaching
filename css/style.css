@@ -294,3 +294,73 @@ label.block { margin-top: 10px; }
 .user-chip a { color: #fff; }
 #sync-status { cursor: pointer; opacity: 0.92; }
 #sync-status.error { color: #ffd0d0; font-weight: 700; }
+
+/* =========================================================
+ * スケジュール・出欠・結果
+ * ======================================================= */
+.schedule-layout { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 14px; margin-top: 12px; align-items: start; }
+@media (max-width: 820px) { .schedule-layout { grid-template-columns: 1fr; } }
+
+.event-list { display: flex; flex-direction: column; gap: 8px; }
+.event-chip {
+  display: flex; flex-direction: column; gap: 3px;
+  text-align: left; padding: 12px 14px;
+  border: 1.5px solid var(--line); border-left: 6px solid var(--accent);
+  border-radius: 12px; background: #fff; cursor: pointer; font: inherit;
+}
+.event-chip.type-match { border-left-color: var(--danger); }
+.event-chip.type-other { border-left-color: #999; }
+.event-chip.active { box-shadow: 0 0 0 2px rgba(28,124,68,.3); border-color: var(--green); }
+.event-chip.past { opacity: .62; }
+.ev-date { font-size: 12px; font-weight: 700; color: var(--green-dark); }
+.ev-title { font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+.ev-badge { font-size: 11px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 6px; padding: 1px 7px; }
+.ev-badge.type-match { background: var(--danger); }
+.ev-badge.type-other { background: #888; }
+.ev-badge.type-practice { background: var(--green); }
+.ev-sub { font-size: 12px; color: #5c6b57; }
+.ev-att { white-space: nowrap; }
+
+.event-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.event-head h3 { margin: 0; }
+.ev-info { margin: 8px 0; font-size: 14px; font-weight: 600; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.ev-note { background: #fafcf8; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 13px; line-height: 1.7; margin: 6px 0; }
+
+.ev-result { margin: 12px 0; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff7ed; }
+.ev-result h4 { margin: 0 0 8px; }
+.score-row { display: flex; align-items: center; gap: 8px; font-weight: 700; flex-wrap: wrap; }
+.score-row input { width: 64px; text-align: center; font-size: 18px; }
+.ev-result textarea { width: 100%; margin-top: 8px; }
+.score-view { font-size: 20px; font-weight: 800; color: var(--green-dark); margin: 4px 0; }
+
+.att-block { margin-top: 14px; }
+.att-block h4 { margin: 0 0 8px; }
+.att-block h4 small { font-weight: 500; color: #5c6b57; }
+.att-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+.att-row.mine { background: #edf6ef; border-radius: 8px; }
+.att-name { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.att-name small { color: #5c6b57; font-weight: 500; }
+.att-name .you { background: var(--green); color: #fff; font-size: 10px; border-radius: 6px; padding: 1px 6px; }
+.att-btns { display: flex; gap: 4px; }
+.att-btn {
+  min-height: 40px; padding: 4px 10px; font-size: 13px; font-weight: 700;
+  border: 1.5px solid var(--line); border-radius: 9px; background: #fff; color: #555; cursor: pointer;
+}
+.att-btn:disabled { opacity: .45; cursor: default; }
+.att-btn.att-present.on { background: #1c7c44; border-color: #1c7c44; color: #fff; }
+.att-btn.att-absent.on { background: var(--danger); border-color: var(--danger); color: #fff; }
+.att-btn.att-maybe.on { background: #e8a614; border-color: #e8a614; color: #fff; }
+
+/* ---- メンバー ---- */
+.member-card { margin: 0; }
+.member-main { display: flex; align-items: center; gap: 8px; font-size: 16px; }
+.member-num { font-weight: 800; color: var(--green-dark); }
+
+/* ---- 権限：プレイヤーは編集UIを隠す ---- */
+body.role-player .coach-only { display: none !important; }
+
+/* ---- 印刷：ワイド表・出欠セル ---- */
+.p-table.wide { width: 100%; }
+.p-table.wide td, .p-table.wide th { min-width: 0; }
+.att-cell { text-align: center; font-weight: 700; font-size: 13pt; }
+.user-chip .role-tag { background: rgba(255,255,255,.22); border-radius: 8px; padding: 1px 8px; font-size: 11px; margin-left: 6px; }
