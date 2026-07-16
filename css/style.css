@@ -288,3 +288,9 @@ label.block { margin-top: 10px; }
 .p-table { border-collapse: collapse; flex: 1; font-size: 11pt; }
 .p-table th, .p-table td { border: 0.75pt solid #999; padding: 4pt 8pt; text-align: left; min-width: 40pt; }
 .p-table th { background: #e7f0e3; }
+
+/* ---- チーム共有版（team/）で使う要素 ---- */
+.user-chip { float: right; font-size: 13px; font-weight: 500; margin-top: 2px; }
+.user-chip a { color: #fff; }
+#sync-status { cursor: pointer; opacity: 0.92; }
+#sync-status.error { color: #ffd0d0; font-weight: 700; }

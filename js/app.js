@@ -143,19 +143,26 @@ function normalizeDB(d) {
   };
 }
 
-function loadDB() {
-  try {
-    const raw = localStorage.getItem(STORE_KEY);
-    if (raw) return normalizeDB(JSON.parse(raw));
-  } catch (e) { console.warn('データ読み込みに失敗:', e); }
-  return seedDB();
-}
+/* 保存先ストア（標準：この端末のlocalStorage）
+ * チーム共有版では window.AppStore（team/js/remote.js）がサーバー同期版に差し替える */
+const LocalStore = {
+  async load() {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (raw) return JSON.parse(raw);
+    } catch (e) { console.warn('データ読み込みに失敗:', e); }
+    return null;
+  },
+  save(db) {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify(db));
+    } catch (e) { console.warn('データ保存に失敗:', e); }
+  },
+};
 
-function saveDB() {
-  try {
-    localStorage.setItem(STORE_KEY, JSON.stringify(DB));
-  } catch (e) { console.warn('データ保存に失敗:', e); }
-}
+function store() { return window.AppStore || LocalStore; }
+
+function saveDB() { store().save(DB); }
 
 /* =========================================================
  * ダウンロード・PNG書き出し
@@ -934,9 +941,21 @@ function fillSelect(id, values) {
   byId(id).innerHTML = values.map(v => `<option value="${esc(v)}">${esc(v)}</option>`).join('');
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  DB = loadDB();
-  saveDB();
+/* サーバー同期（チーム共有版）から呼ばれる：他メンバーの変更を画面に反映する */
+window.applyExternalDB = function (newDb) {
+  DB = normalizeDB(newDb);
+  if (currentMenuId && !DB.menus.some(m => m.id === currentMenuId)) currentMenuId = null;
+  if (currentBoardId && !DB.boards.some(b => b.id === currentBoardId)) currentBoardId = null;
+  if (FM.id && !DB.formations.some(f => f.id === FM.id)) FM.id = null;
+  const active = document.querySelector('.tab-btn.active');
+  showTab(active ? active.dataset.tab : 'menus');
+};
+
+document.addEventListener('DOMContentLoaded', async () => {
+  let loaded = null;
+  try { loaded = await store().load(); } catch (e) { console.warn('初期データの読み込みに失敗:', e); }
+  DB = normalizeDB(loaded || seedDB());
+  if (!loaded) saveDB();
 
   document.querySelector('.tabs').addEventListener('click', e => {
     const b = e.target.closest('.tab-btn');

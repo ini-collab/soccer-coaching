@@ -1,0 +1,4 @@
+# チーム共有版のサーバー個別設定・データ（コミットしない）
+team/config.php
+team/data/*
+!team/data/.htaccess
