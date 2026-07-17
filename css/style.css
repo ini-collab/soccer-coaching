@@ -390,3 +390,13 @@ body.role-player .coach-only { display: none !important; }
   border: 2px solid var(--line); border-radius: 12px; background: #fff; color: #555; cursor: pointer;
 }
 .role-btn.on { background: var(--rc, var(--accent)); border-color: var(--rc, var(--accent)); color: #fff; }
+
+/* プレイヤー(参照のみ)専用の表示。既定は非表示、role-playerのときだけ表示 */
+.player-only { display: none !important; }
+body.role-player .player-only { display: block !important; }
+
+/* 閲覧専用（プレイヤー）のメニュー内容表示 */
+.menu-item.view { background: #fff; }
+.mi-vtitle { flex: 2 1 220px; font-weight: 700; }
+.mi-vmin { font-weight: 700; color: var(--green-dark); white-space: nowrap; }
+.mi-vnote { flex: 1 1 160px; color: #5c6b57; font-size: 13px; }

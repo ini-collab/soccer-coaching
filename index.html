@@ -30,7 +30,7 @@
     <section id="tab-menus" class="tab active">
       <div class="pane-head">
         <h2>練習メニュー</h2>
-        <button id="menu-new" class="btn primary">＋ 新しいメニュー</button>
+        <button id="menu-new" class="btn primary coach-only">＋ 新しいメニュー</button>
       </div>
       <div id="menu-list" class="chip-list"></div>
 
@@ -44,14 +44,15 @@
 
         <h3>メニュー内容 <span id="menu-total" class="total"></span></h3>
         <div id="menu-items"></div>
-        <button id="menu-add-item" class="btn">＋ 項目を追加</button>
+        <button id="menu-add-item" class="btn coach-only">＋ 項目を追加</button>
 
         <div class="btn-row end">
           <button id="menu-print" class="btn primary">🖨 印刷（配布用）</button>
           <button id="menu-export" class="btn">📤 JSON書き出し</button>
-          <button id="menu-delete" class="btn danger">🗑 メニューを削除</button>
+          <button id="menu-delete" class="btn danger coach-only">🗑 メニューを削除</button>
         </div>
-        <p class="hint">💡 入力内容は自動で保存されます。「印刷」からPDF保存もできます。</p>
+        <p class="hint coach-only">💡 入力内容は自動で保存されます。「印刷」からPDF保存もできます。</p>
+        <p class="hint player-only">👀 このメニューは閲覧専用です。「印刷」からPDF保存できます。</p>
       </div>
     </section>
 
@@ -59,10 +60,10 @@
     <section id="tab-drills" class="tab">
       <div class="pane-head">
         <h2>ドリル集（練習の引き出し）</h2>
-        <button id="drill-new" class="btn primary">＋ 新しいドリル</button>
+        <button id="drill-new" class="btn primary coach-only">＋ 新しいドリル</button>
       </div>
 
-      <div id="drill-form" class="card hidden">
+      <div id="drill-form" class="card hidden coach-only">
         <h3 id="drill-form-title">新しいドリル</h3>
         <div class="form-grid">
           <label>ドリル名<input id="df-name" placeholder="例：鳥かごパス"></label>
@@ -94,7 +95,7 @@
 
       <div class="board-layout">
         <div class="board-main">
-          <div class="toolbar" id="board-tools">
+          <div class="toolbar coach-only" id="board-tools">
             <button class="tool active" data-tool="select">✋ 移動</button>
             <button class="tool" data-tool="home">🔵 味方</button>
             <button class="tool" data-tool="away">🔴 相手</button>
@@ -108,7 +109,7 @@
             <button class="tool" data-tool="text">🔤 文字</button>
             <button class="tool" data-tool="erase">🧹 消す</button>
           </div>
-          <div class="toolbar sub">
+          <div class="toolbar sub coach-only">
             <span class="tb-label">色</span>
             <span id="board-colors" class="swatches"></span>
             <select id="board-field" class="field-select"></select>
@@ -119,9 +120,9 @@
           <svg id="board-svg" xmlns="http://www.w3.org/2000/svg"></svg>
 
           <div class="btn-row board-actions">
-            <input id="board-name" placeholder="ボード名（例：コーナーキックの守備）">
-            <button id="board-save" class="btn primary">💾 保存</button>
-            <button id="board-newbtn" class="btn">＋ 新規</button>
+            <input id="board-name" class="coach-only" placeholder="ボード名（例：コーナーキックの守備）">
+            <button id="board-save" class="btn primary coach-only">💾 保存</button>
+            <button id="board-newbtn" class="btn coach-only">＋ 新規</button>
             <button id="board-png" class="btn">🖼 PNG保存</button>
             <button id="board-print" class="btn">🖨 印刷</button>
             <span id="board-status" class="status"></span>
@@ -170,14 +171,14 @@
       <div class="board-layout">
         <div class="board-main">
           <div class="toolbar sub">
-            <select id="fm-format" class="field-select"></select>
-            <select id="fm-preset" class="field-select"></select>
-            <input id="fm-name" placeholder="名前（例：vs ○○FC 前半）">
+            <select id="fm-format" class="field-select coach-only"></select>
+            <select id="fm-preset" class="field-select coach-only"></select>
+            <input id="fm-name" class="coach-only" placeholder="名前（例：vs ○○FC 前半）">
           </div>
           <svg id="formation-svg" xmlns="http://www.w3.org/2000/svg" class="formation"></svg>
           <div class="btn-row board-actions">
-            <button id="fm-save" class="btn primary">💾 保存</button>
-            <button id="fm-new" class="btn">＋ 新規</button>
+            <button id="fm-save" class="btn primary coach-only">💾 保存</button>
+            <button id="fm-new" class="btn coach-only">＋ 新規</button>
             <button id="fm-png" class="btn">🖼 PNG保存</button>
             <button id="fm-print" class="btn">🖨 印刷</button>
             <span id="fm-status" class="status"></span>

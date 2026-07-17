@@ -477,6 +477,10 @@ function fillMenuEditor() {
   byId('menu-date').value = m.date || '';
   byId('menu-age').value = m.age || '';
   byId('menu-note').value = m.note || '';
+  // プレイヤーは閲覧のみ：基本情報の入力を編集不可にする
+  const ro = !canEdit();
+  ['menu-title', 'menu-date', 'menu-note'].forEach(id => { byId(id).readOnly = ro; });
+  byId('menu-age').disabled = ro;
   renderMenuItems();
 }
 
@@ -492,6 +496,21 @@ function renderMenuItems() {
   const m = currentMenu();
   if (!m) return;
   const wrap = byId('menu-items');
+  if (!canEdit()) {
+    // プレイヤーは閲覧のみ：内容を読みやすく表示
+    wrap.innerHTML = (m.items || []).map((it, i) => {
+      const d = DB.drills.find(x => x.id === it.drillId);
+      const title = d ? `${esc(d.name)}【${esc(d.category || '')}】` : esc(it.note || '（自由項目）');
+      return `<div class="menu-item view">
+        <span class="mi-num">${i + 1}.</span>
+        <span class="mi-vtitle">${title}</span>
+        <span class="mi-vmin">${it.min ? esc(it.min) + '分' : ''}</span>
+        ${d && it.note ? `<span class="mi-vnote">${esc(it.note)}</span>` : ''}
+      </div>`;
+    }).join('') || '<p class="hint">この日のメニューはまだありません。</p>';
+    byId('menu-total').textContent = `（合計 約${menuTotal(m)}分）`;
+    return;
+  }
   wrap.innerHTML = (m.items || []).map((it, i) => `
     <div class="menu-item" data-idx="${i}">
       <span class="mi-num">${i + 1}.</span>
@@ -643,7 +662,7 @@ function renderDrills() {
         </div>
         <div class="drill-card-meta">${esc(d.age || '')}${d.duration ? `・約${esc(d.duration)}分` : ''}${d.players ? `・${esc(d.players)}` : ''}</div>
         ${d.description ? `<div class="drill-card-desc">${nl2br(d.description)}</div>` : ''}
-        <div class="btn-row">
+        <div class="btn-row"${canEdit() ? '' : ' style="display:none"'}>
           <button class="btn small drill-edit" data-id="${d.id}">✎ 編集</button>
           <button class="btn small danger drill-del" data-id="${d.id}">削除</button>
         </div>
@@ -744,7 +763,7 @@ function renderBoardList() {
         <button class="btn small b-open" data-id="${b.id}">開く</button>
         <button class="btn small b-png" data-id="${b.id}">PNG</button>
         <button class="btn small b-print" data-id="${b.id}">🖨</button>
-        <button class="btn small danger b-del" data-id="${b.id}">✕</button>
+        ${canEdit() ? `<button class="btn small danger b-del" data-id="${b.id}">✕</button>` : ''}
       </div>
     </div>`).join('') || '<p class="hint">保存したボードがここに並びます。</p>';
 }
@@ -884,7 +903,7 @@ function renderFormationList() {
       <div class="btn-row">
         <button class="btn small f-open" data-id="${f.id}">開く</button>
         <button class="btn small f-print" data-id="${f.id}">🖨</button>
-        <button class="btn small danger f-del" data-id="${f.id}">✕</button>
+        ${canEdit() ? `<button class="btn small danger f-del" data-id="${f.id}">✕</button>` : ''}
       </div>
     </div>`).join('') || '<p class="hint">保存したポジション表がここに並びます。</p>';
 }
