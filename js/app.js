@@ -1225,9 +1225,103 @@ function openMemberForm(m) {
   byId('member-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+/* ---- メンバーのCSV書き出し／読み込み ---- */
+const CSV_HEADERS = ['ID', '名前', '学年', '背番号', 'メモ'];
+
+function csvCell(s) {
+  s = String(s ?? '');
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function membersToCSV() {
+  const rows = DB.members.map(m => [m.id, m.name, m.grade || '', m.number || '', m.note || ''].map(csvCell).join(','));
+  // 先頭にBOMを付けてExcelで文字化けしないようにする
+  return '\ufeff' + [CSV_HEADERS.join(','), ...rows].join('\r\n') + '\r\n';
+}
+
+function parseCSV(text) {
+  text = String(text).replace(/^\ufeff/, '');
+  const rows = [];
+  let row = [], field = '', inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; }
+        else inQ = false;
+      } else field += c;
+    } else if (c === '"') {
+      inQ = true;
+    } else if (c === ',') {
+      row.push(field); field = '';
+    } else if (c === '\n') {
+      row.push(field); rows.push(row); row = []; field = '';
+    } else if (c !== '\r') {
+      field += c;
+    }
+  }
+  if (field !== '' || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+function importMembersCSV(text) {
+  const rows = parseCSV(text).filter(r => r.some(c => String(c).trim() !== ''));
+  if (!rows.length) { alert('CSVにデータがありません。'); return; }
+
+  const norm = s => String(s || '').trim().toLowerCase();
+  const head = rows[0].map(norm);
+  const isHeader = head.some(h => ['id', '名前', '氏名', 'name', '学年', 'grade', '背番号', '番号', 'number', 'no', 'メモ', 'note', '備考'].includes(h));
+  let map = { id: -1, name: 0, grade: 1, number: 2, note: 3 };
+  let start = 0;
+  if (isHeader) {
+    start = 1;
+    map = { id: -1, name: -1, grade: -1, number: -1, note: -1 };
+    head.forEach((h, i) => {
+      if (h === 'id') map.id = i;
+      else if (['名前', '氏名', 'name'].includes(h)) map.name = i;
+      else if (['学年', 'grade'].includes(h)) map.grade = i;
+      else if (['背番号', '番号', 'number', 'no'].includes(h)) map.number = i;
+      else if (['メモ', 'note', '備考'].includes(h)) map.note = i;
+    });
+  }
+  if (map.name < 0) { alert('「名前」の列が見つかりません。1行目の見出しをご確認ください。'); return; }
+
+  const get = (r, idx) => (idx >= 0 && r[idx] != null ? String(r[idx]).trim() : '');
+  let added = 0, updated = 0;
+  rows.slice(start).forEach(r => {
+    const name = get(r, map.name);
+    if (!name) return;
+    const data = { name, grade: get(r, map.grade), number: get(r, map.number), note: get(r, map.note) };
+    const gid = get(r, map.id);
+    let m = gid ? DB.members.find(x => x.id === gid) : null;
+    if (!m) m = DB.members.find(x => x.name === name);
+    if (m) { Object.assign(m, data); updated++; }
+    else { DB.members.push(Object.assign({ id: gid || uid('p'), userId: '' }, data)); added++; }
+  });
+  saveDB();
+  renderRoster();
+  alert(`CSVを読み込みました。\n追加：${added}名／更新：${updated}名`);
+}
+
 function initRosterTab() {
   byId('roster-new').addEventListener('click', () => openMemberForm(null));
   byId('roster-print').addEventListener('click', () => printHTML(rosterPrintHTML(), false));
+
+  byId('roster-csv-export').addEventListener('click', () => {
+    downloadBlob(new Blob([membersToCSV()], { type: 'text/csv;charset=utf-8' }), `メンバー名簿_${today()}.csv`);
+  });
+  byId('roster-csv-import').addEventListener('click', () => byId('roster-csv-file').click());
+  byId('roster-csv-file').addEventListener('change', e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try { importMembersCSV(reader.result); }
+      catch (err) { alert('CSVを読み込めませんでした：' + err.message); }
+    };
+    reader.readAsText(file);
+  });
   byId('roster-list').addEventListener('click', e => {
     const edit = e.target.closest('.member-edit');
     const del = e.target.closest('.member-del');
