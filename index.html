@@ -139,7 +139,32 @@
     <section id="tab-formation" class="tab">
       <div class="pane-head">
         <h2>ポジション（フォーメーション）</h2>
-        <span class="hint">選手をドラッグで移動／タップで名前を入力</span>
+        <span class="hint">選手をドラッグで移動／タップで選手・役割を設定</span>
+      </div>
+
+      <!-- ポジション枠の編集モーダル -->
+      <div id="fm-slot-modal" class="modal-overlay hidden">
+        <div class="modal-box">
+          <h3 id="fm-slot-title">選手を設定</h3>
+          <label class="block">登録メンバーから選ぶ
+            <select id="fm-slot-member"></select>
+          </label>
+          <label class="block" id="fm-slot-name-wrap">名前（自由入力）
+            <input id="fm-slot-name" placeholder="例：たろう">
+          </label>
+          <label class="block">背番号
+            <input id="fm-slot-num" inputmode="numeric" placeholder="例：7">
+          </label>
+          <div class="block">
+            <span class="field-label">役割（ポジション）</span>
+            <div id="fm-slot-roles" class="role-pick"></div>
+          </div>
+          <div class="btn-row end">
+            <button id="fm-slot-save" class="btn primary">決定</button>
+            <button id="fm-slot-clear" class="btn">空欄にする</button>
+            <button id="fm-slot-cancel" class="btn">キャンセル</button>
+          </div>
+        </div>
       </div>
 
       <div class="board-layout">

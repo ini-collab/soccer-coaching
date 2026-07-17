@@ -59,11 +59,12 @@ const FORMATION_FORMATS = {
   },
 };
 const ROLE_COLORS = { GK: '#e8a614', DF: '#1f6fe0', MF: '#7048e8', FW: '#e02f2f' };
+const ROLES = ['GK', 'DF', 'MF', 'FW'];
 
 function presetPositions(format, preset) {
   const def = (FORMATION_FORMATS[format] || {}).presets || {};
   const list = def[preset] || Object.values(def)[0] || [];
-  return list.map((p, i) => ({ x: p[0], y: p[1], role: p[2], num: i + 1, name: '' }));
+  return list.map((p, i) => ({ x: p[0], y: p[1], role: p[2], num: i + 1, name: '', memberId: '' }));
 }
 
 /* =========================================================
@@ -895,6 +896,81 @@ function fmPoint(e, svg) {
   return m ? p.matrixTransform(m.inverse()) : { x: 0, y: 0 };
 }
 
+/* ---- ポジション枠の編集（登録メンバーから選択 or 自由入力／役割設定）---- */
+let fmSlotIndex = null;
+
+function openFmSlot(i) {
+  const pos = FM.positions[i];
+  if (!pos) return;
+  fmSlotIndex = i;
+  byId('fm-slot-title').textContent = `${i + 1} 人目の枠を設定`;
+
+  // 登録メンバーの選択肢
+  const sel = byId('fm-slot-member');
+  const opts = ['<option value="">（自由入力）</option>'];
+  DB.members.forEach(m => {
+    const label = esc(m.name) + (m.grade ? '（' + esc(m.grade) + '）' : '') + (m.number ? ' #' + esc(m.number) : '');
+    opts.push(`<option value="${m.id}">${label}</option>`);
+  });
+  sel.innerHTML = opts.join('');
+  // 紐づけ済みメンバーが今も名簿にいれば選択、いなければ自由入力扱い
+  sel.value = (pos.memberId && DB.members.some(m => m.id === pos.memberId)) ? pos.memberId : '';
+
+  byId('fm-slot-name').value = pos.name || '';
+  byId('fm-slot-num').value = pos.num != null ? pos.num : '';
+
+  // 役割ボタン
+  byId('fm-slot-roles').innerHTML = ROLES.map(r =>
+    `<button type="button" class="role-btn ${r === pos.role ? 'on' : ''}" data-role="${r}" style="--rc:${roleColor(r)}">${r}</button>`
+  ).join('');
+
+  updateFmSlotMemberUI();
+  byId('fm-slot-modal').classList.remove('hidden');
+}
+
+function updateFmSlotMemberUI() {
+  const mid = byId('fm-slot-member').value;
+  const m = DB.members.find(x => x.id === mid);
+  // メンバー選択時は自由入力の名前欄を隠す
+  byId('fm-slot-name-wrap').classList.toggle('hidden', !!mid);
+  if (m && m.number) byId('fm-slot-num').value = m.number;
+}
+
+function saveFmSlot() {
+  const i = fmSlotIndex;
+  if (i == null || !FM.positions[i]) { closeFmSlot(); return; }
+  const pos = FM.positions[i];
+  const mid = byId('fm-slot-member').value;
+  const m = DB.members.find(x => x.id === mid);
+  if (m) {
+    pos.memberId = m.id;
+    pos.name = m.name;
+  } else {
+    pos.memberId = '';
+    pos.name = byId('fm-slot-name').value.trim();
+  }
+  pos.num = byId('fm-slot-num').value.trim();
+  const roleBtn = byId('fm-slot-roles').querySelector('.role-btn.on');
+  if (roleBtn) pos.role = roleBtn.dataset.role;
+  closeFmSlot();
+  renderFormationSVG();
+}
+
+function clearFmSlot() {
+  const i = fmSlotIndex;
+  if (i != null && FM.positions[i]) {
+    FM.positions[i].name = '';
+    FM.positions[i].memberId = '';
+  }
+  closeFmSlot();
+  renderFormationSVG();
+}
+
+function closeFmSlot() {
+  fmSlotIndex = null;
+  byId('fm-slot-modal').classList.add('hidden');
+}
+
 function initFormationTab() {
   const svg = byId('formation-svg');
   svg.style.touchAction = 'none';
@@ -916,8 +992,10 @@ function initFormationTab() {
     FM.preset = byId('fm-preset').value;
     const old = FM.positions;
     FM.positions = presetPositions(FM.format, FM.preset);
-    // 入力済みの名前は番号順にできるだけ引き継ぐ
-    FM.positions.forEach((p, i) => { if (old[i]) p.name = old[i].name; });
+    // 入力済みの選手（名前・メンバー紐付け・背番号）は順番にできるだけ引き継ぐ
+    FM.positions.forEach((p, i) => {
+      if (old[i]) { p.name = old[i].name; p.memberId = old[i].memberId || ''; p.num = old[i].num; }
+    });
     renderFormationSVG();
   });
 
@@ -946,17 +1024,24 @@ function initFormationTab() {
     if (!fmDrag) return;
     const d = fmDrag;
     fmDrag = null;
-    if (!d.moved) {
-      const pos = FM.positions[d.i];
-      const v = prompt(`${pos.role}（${pos.num}番）の選手名を入力`, pos.name || '');
-      if (v !== null) {
-        pos.name = v.trim();
-        renderFormationSVG();
-      }
-    }
+    if (!d.moved && canEdit()) openFmSlot(d.i); // タップ＝枠の設定（メンバー・役割）
   };
   svg.addEventListener('pointerup', fmUp);
   svg.addEventListener('pointercancel', fmUp);
+
+  // 枠編集モーダルのイベント
+  byId('fm-slot-member').addEventListener('change', updateFmSlotMemberUI);
+  byId('fm-slot-roles').addEventListener('click', e => {
+    const b = e.target.closest('.role-btn');
+    if (!b) return;
+    byId('fm-slot-roles').querySelectorAll('.role-btn').forEach(x => x.classList.toggle('on', x === b));
+  });
+  byId('fm-slot-save').addEventListener('click', saveFmSlot);
+  byId('fm-slot-clear').addEventListener('click', clearFmSlot);
+  byId('fm-slot-cancel').addEventListener('click', closeFmSlot);
+  byId('fm-slot-modal').addEventListener('click', e => {
+    if (e.target === byId('fm-slot-modal')) closeFmSlot(); // 背景タップで閉じる
+  });
 
   byId('fm-save').addEventListener('click', () => {
     FM.name = byId('fm-name').value.trim() || `${FORMATION_FORMATS[FM.format].label} ${FM.preset}`;

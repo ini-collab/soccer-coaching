@@ -364,3 +364,29 @@ body.role-player .coach-only { display: none !important; }
 .p-table.wide td, .p-table.wide th { min-width: 0; }
 .att-cell { text-align: center; font-weight: 700; font-size: 13pt; }
 .user-chip .role-tag { background: rgba(255,255,255,.22); border-radius: 8px; padding: 1px 8px; font-size: 11px; margin-left: 6px; }
+
+/* =========================================================
+ * ポジション枠 編集モーダル
+ * ======================================================= */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(0, 0, 0, .45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.modal-box {
+  background: #fff; border-radius: 16px; padding: 20px;
+  width: 100%; max-width: 420px; max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, .35);
+}
+.modal-box h3 { margin: 0 0 10px; }
+.modal-box .block { display: block; margin-top: 12px; font-size: 13px; font-weight: 700; color: #47543f; }
+.modal-box .block input, .modal-box .block select { width: 100%; margin-top: 4px; }
+.field-label { display: block; margin-bottom: 4px; }
+
+.role-pick { display: flex; gap: 8px; }
+.role-btn {
+  flex: 1; min-height: 46px; font-size: 15px; font-weight: 800;
+  border: 2px solid var(--line); border-radius: 12px; background: #fff; color: #555; cursor: pointer;
+}
+.role-btn.on { background: var(--rc, var(--accent)); border-color: var(--rc, var(--accent)); color: #fff; }
