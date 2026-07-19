@@ -404,3 +404,53 @@ body.role-player .player-only { display: block !important; }
 /* 予定フォームの「複数日登録」ブロック */
 .ef-repeat { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
 .ef-repeat #ef-repeat-hint { margin: 4px 0 0; color: #1c7c44; }
+
+/* =========================================================
+ * スケジュール カレンダー表示
+ * ======================================================= */
+.sv-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+.sv-toggle { display: inline-flex; border: 1.5px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; }
+.sv-btn { min-height: 42px; padding: 6px 16px; font: inherit; font-weight: 700; border: none; background: #fff; color: #555; cursor: pointer; }
+.sv-btn.active { background: var(--green); color: #fff; }
+
+.cal-nav { display: none; align-items: center; gap: 8px; }
+#tab-schedule.cal-mode .cal-nav { display: flex; }
+.cal-label { font-size: 16px; font-weight: 800; color: var(--green-dark); min-width: 120px; text-align: center; }
+
+#event-calendar { display: none; margin-top: 12px; }
+#tab-schedule.cal-mode #event-calendar { display: block; }
+#tab-schedule.cal-mode #event-list { display: none; }
+#tab-schedule.cal-mode .schedule-layout { grid-template-columns: 1fr; }
+
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-dow { text-align: center; font-weight: 700; font-size: 12px; padding: 4px 0; color: #47543f; }
+.cal-dow.sun { color: var(--danger); }
+.cal-dow.sat { color: var(--accent); }
+.cal-cell {
+  min-height: 92px; border: 1px solid var(--line); border-radius: 8px; padding: 3px;
+  background: #fff; display: flex; flex-direction: column; gap: 2px; overflow: hidden;
+}
+.cal-cell.empty { background: transparent; border: none; }
+#tab-schedule.cal-mode.role-coach .cal-cell[data-date], body:not(.role-player) .cal-cell[data-date] { cursor: pointer; }
+.cal-cell.today { border-color: var(--green); box-shadow: inset 0 0 0 1.5px var(--green); }
+.cal-daynum { font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 4px; }
+.cal-cell.sun .cal-daynum { color: var(--danger); }
+.cal-cell.sat .cal-daynum { color: var(--accent); }
+.cal-todaymark { background: var(--green); color: #fff; border-radius: 6px; font-size: 9px; padding: 0 5px; font-weight: 700; }
+.cal-evs { display: flex; flex-direction: column; gap: 2px; }
+.cal-ev {
+  display: block; width: 100%; text-align: left; font-size: 11px; line-height: 1.4;
+  padding: 2px 5px; border-radius: 5px; border: none; color: #fff; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--green);
+}
+.cal-ev.type-match { background: var(--danger); }
+.cal-ev.type-practice { background: var(--green); }
+.cal-ev.type-other { background: #888; }
+.cal-ev.sel { outline: 2px solid #111; outline-offset: 1px; }
+.cal-help { margin-top: 8px; }
+
+@media (max-width: 620px) {
+  .cal-cell { min-height: 64px; }
+  .cal-ev { font-size: 10px; padding: 1px 3px; }
+  .cal-grid { gap: 2px; }
+}

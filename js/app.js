@@ -1398,12 +1398,27 @@ function currentEvent() {
   return DB.events.find(e => e.id === currentEventId) || null;
 }
 
+let scheduleView = 'list';   // 'list' | 'calendar'
+let calMonth = null;         // 表示中の月の1日（Date）
+
 function renderSchedule() {
   const canE = canEdit();
   byId('event-new').classList.toggle('hidden', !canE);
+  byId('tab-schedule').classList.toggle('cal-mode', scheduleView === 'calendar');
+  byId('sv-list').classList.toggle('active', scheduleView === 'list');
+  byId('sv-cal').classList.toggle('active', scheduleView === 'calendar');
+
+  renderEventList();
+  if (scheduleView === 'calendar') renderCalendar();
+
+  const detail = byId('event-detail');
+  detail.classList.toggle('hidden', !currentEventId);
+  if (currentEventId) renderEventDetail();
+}
+
+function renderEventList() {
   const todayStr = futureDate(0);
-  const list = byId('event-list');
-  list.innerHTML = sortedEvents().map(e => {
+  byId('event-list').innerHTML = sortedEvents().map(e => {
     const past = (e.date || '') && e.date < todayStr;
     const c = attCounts(e.id);
     return `<button class="event-chip ${e.id === currentEventId ? 'active' : ''} ${past ? 'past' : ''} type-${e.type}" data-id="${e.id}">
@@ -1412,9 +1427,51 @@ function renderSchedule() {
       <span class="ev-sub">${e.place ? esc(e.place) : ''}${resultLabel(e) ? '　結果 ' + esc(resultLabel(e)) : ''}　<span class="ev-att">出${c.present}/欠${c.absent}/未定${c.maybe}</span></span>
     </button>`;
   }).join('') || '<p class="hint">予定はまだありません。</p>';
-  const detail = byId('event-detail');
-  detail.classList.toggle('hidden', !currentEventId);
-  if (currentEventId) renderEventDetail();
+}
+
+function ensureCalMonth() {
+  if (calMonth) return;
+  // 直近の予定がある月、なければ今月を初期表示にする
+  const todayStr = futureDate(0);
+  const upcoming = sortedEvents().find(e => e.date && e.date >= todayStr) || sortedEvents()[sortedEvents().length - 1];
+  const base = new Date(((upcoming && upcoming.date) || todayStr) + 'T00:00:00');
+  calMonth = new Date(base.getFullYear(), base.getMonth(), 1);
+}
+
+function shiftCalMonth(delta) {
+  ensureCalMonth();
+  calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + delta, 1);
+  renderCalendar();
+}
+
+function renderCalendar() {
+  ensureCalMonth();
+  const y = calMonth.getFullYear(), mo = calMonth.getMonth();
+  byId('cal-label').textContent = `${y}年 ${mo + 1}月`;
+  const startDow = new Date(y, mo, 1).getDay();
+  const daysInMonth = new Date(y, mo + 1, 0).getDate();
+  const todayStr = futureDate(0);
+
+  const byDate = {};
+  DB.events.forEach(e => { if (e.date) (byDate[e.date] = byDate[e.date] || []).push(e); });
+
+  const dow = ['日', '月', '火', '水', '木', '金', '土'];
+  let cells = dow.map((d, i) => `<div class="cal-dow ${i === 0 ? 'sun' : ''} ${i === 6 ? 'sat' : ''}">${d}</div>`).join('');
+  for (let i = 0; i < startDow; i++) cells += '<div class="cal-cell empty"></div>';
+  for (let day = 1; day <= daysInMonth; day++) {
+    const ds = `${y}-${String(mo + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const dowIdx = (startDow + day - 1) % 7;
+    const evs = (byDate[ds] || []).slice().sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+    const pills = evs.map(e =>
+      `<button class="cal-ev type-${e.type} ${e.id === currentEventId ? 'sel' : ''}" data-id="${e.id}" title="${esc(e.title || '')}">${e.start ? esc(e.start) + ' ' : ''}${esc(e.title || '（無題）')}</button>`
+    ).join('');
+    cells += `<div class="cal-cell ${ds === todayStr ? 'today' : ''} ${dowIdx === 0 ? 'sun' : ''} ${dowIdx === 6 ? 'sat' : ''}" data-date="${ds}">
+      <div class="cal-daynum">${day}${ds === todayStr ? '<span class="cal-todaymark">今日</span>' : ''}</div>
+      <div class="cal-evs">${pills}</div>
+    </div>`;
+  }
+  byId('event-calendar').innerHTML = `<div class="cal-grid">${cells}</div>` +
+    (canEdit() ? '<p class="hint cal-help">💡 予定のない日をタップすると、その日で新しい予定を作成できます。</p>' : '');
 }
 
 function renderEventDetail() {
@@ -1621,6 +1678,34 @@ function initScheduleTab() {
     currentEventId = b.dataset.id;
     renderSchedule();
     byId('event-detail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+
+  // 表示切り替え（リスト／カレンダー）
+  byId('sv-list').addEventListener('click', () => { scheduleView = 'list'; renderSchedule(); });
+  byId('sv-cal').addEventListener('click', () => { scheduleView = 'calendar'; renderSchedule(); });
+  // 月の移動
+  byId('cal-prev').addEventListener('click', () => shiftCalMonth(-1));
+  byId('cal-next').addEventListener('click', () => shiftCalMonth(1));
+  byId('cal-today').addEventListener('click', () => {
+    const t = new Date(futureDate(0) + 'T00:00:00');
+    calMonth = new Date(t.getFullYear(), t.getMonth(), 1);
+    renderCalendar();
+  });
+  // カレンダー内のクリック（予定を選ぶ／空き日で新規作成）
+  byId('event-calendar').addEventListener('click', e => {
+    const pill = e.target.closest('.cal-ev');
+    if (pill) {
+      currentEventId = pill.dataset.id;
+      renderSchedule();
+      byId('event-detail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+    const cell = e.target.closest('.cal-cell[data-date]');
+    if (cell && canEdit()) {
+      openEventForm(null);
+      byId('ef-date').value = cell.dataset.date;
+      updateRepeatUI();
+    }
   });
   byId('ef-type').addEventListener('change', updateEventFormType);
   byId('ef-repeat').addEventListener('change', updateRepeatUI);
