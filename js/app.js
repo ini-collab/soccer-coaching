@@ -1467,6 +1467,7 @@ function renderEventDetail() {
       <h3>${esc(e.title || '（無題）')}</h3>
       <div id="event-edit-btns" class="btn-row ${canE ? '' : 'hidden'}">
         <button id="ev-edit" class="btn small">✎ 編集</button>
+        <button id="ev-copy" class="btn small">📋 コピー</button>
         <button id="ev-print" class="btn small">🖨 出欠表</button>
         <button id="ev-del" class="btn small danger">削除</button>
       </div>
@@ -1490,6 +1491,7 @@ function bindEventDetail() {
   const editBtns = byId('event-edit-btns');
   if (editBtns) {
     const ed = byId('ev-edit'); if (ed) ed.onclick = () => openEventForm(e);
+    const cp = byId('ev-copy'); if (cp) cp.onclick = () => openEventForm(e, true);
     const pr = byId('ev-print'); if (pr) pr.onclick = () => printHTML(eventSheetPrintHTML(e), false);
     const dl = byId('ev-del'); if (dl) dl.onclick = () => {
       if (confirm(`「${e.title || ''}」を削除しますか？`)) {
@@ -1542,29 +1544,66 @@ function setAttendance(eventId, memberId, status) {
   if (chip) { const c = attCounts(eventId); chip.textContent = `出${c.present}/欠${c.absent}/未定${c.maybe}`; }
 }
 
-function openEventForm(e) {
-  const isNew = !e;
-  const ev = e || { id: uid('e'), type: 'practice', title: '', date: futureDate(0), start: '', end: '', place: '', opponent: '', note: '', menuId: '', result: null };
-  byId('event-form-title').textContent = isNew ? '新しい予定' : '予定を編集';
-  byId('ef-type').value = ev.type;
-  byId('ef-title').value = ev.title;
-  byId('ef-date').value = ev.date;
-  byId('ef-start').value = ev.start;
-  byId('ef-end').value = ev.end;
-  byId('ef-place').value = ev.place;
-  byId('ef-opponent').value = ev.opponent;
-  byId('ef-note').value = ev.note;
+/** YYYY-MM-DD に n日足す */
+function addDays(dateStr, n) {
+  const d = new Date((dateStr || futureDate(0)) + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** くり返し設定から日付の配列を作る（最初の日を含む）*/
+function repeatDates(baseDate, mode, count) {
+  const step = { weekly: 7, biweekly: 14, daily: 1 }[mode];
+  if (!step || !baseDate) return [baseDate];
+  const n = Math.min(30, Math.max(1, parseInt(count, 10) || 1));
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(addDays(baseDate, step * i));
+  return out;
+}
+
+// isCopy=true なら「コピーして新規作成」（別IDの新規予定として開く）
+function openEventForm(e, isCopy) {
+  const isNew = !e || isCopy;
+  const src = e || { type: 'practice', title: '', date: futureDate(0), start: '', end: '', place: '', opponent: '', note: '', menuId: '', result: null };
+  byId('event-form-title').textContent = !isNew ? '予定を編集' : (isCopy ? '予定をコピーして新規作成' : '新しい予定');
+  byId('ef-type').value = src.type;
+  byId('ef-title').value = src.title;
+  // コピー時は翌週の同じ曜日を初期値にする（重複を避けやすく）
+  byId('ef-date').value = isCopy ? addDays(src.date, 7) : (src.date || futureDate(0));
+  byId('ef-start').value = src.start;
+  byId('ef-end').value = src.end;
+  byId('ef-place').value = src.place;
+  byId('ef-opponent').value = src.opponent;
+  byId('ef-note').value = src.note;
   byId('ef-menu').innerHTML = '<option value="">（なし）</option>' +
-    DB.menus.map(m => `<option value="${m.id}"${m.id === ev.menuId ? ' selected' : ''}>${esc(m.title || '（無題）')}</option>`).join('');
-  byId('event-form').dataset.id = ev.id;
+    DB.menus.map(m => `<option value="${m.id}"${m.id === src.menuId ? ' selected' : ''}>${esc(m.title || '（無題）')}</option>`).join('');
+  byId('event-form').dataset.id = isNew ? uid('e') : src.id;
   byId('event-form').dataset.new = isNew ? '1' : '';
+  // くり返し（複数日登録）は新規・コピーのときだけ表示
+  byId('ef-repeat-wrap').classList.toggle('hidden', !isNew);
+  byId('ef-repeat').value = 'none';
+  byId('ef-repeat-count').value = '4';
   updateEventFormType();
+  updateRepeatUI();
   byId('event-form').classList.remove('hidden');
   byId('event-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function updateEventFormType() {
   byId('ef-opponent-wrap').classList.toggle('hidden', byId('ef-type').value !== 'match');
+}
+
+function updateRepeatUI() {
+  const mode = byId('ef-repeat').value;
+  const on = mode !== 'none';
+  byId('ef-repeat-count-wrap').classList.toggle('hidden', !on);
+  const hint = byId('ef-repeat-hint');
+  if (!on) { hint.textContent = ''; return; }
+  const dates = repeatDates(byId('ef-date').value, mode, byId('ef-repeat-count').value);
+  const label = { weekly: '毎週', biweekly: '隔週', daily: '毎日' }[mode];
+  hint.textContent = dates.length > 1
+    ? `${label}で ${dates.length} 件を登録します（${dates[0]} 〜 ${dates[dates.length - 1]}）。それぞれ個別に出欠・結果を記録できます。`
+    : '日付を入力するとくり返しの日程が表示されます。';
 }
 
 function initScheduleTab() {
@@ -1584,9 +1623,13 @@ function initScheduleTab() {
     byId('event-detail').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   });
   byId('ef-type').addEventListener('change', updateEventFormType);
+  byId('ef-repeat').addEventListener('change', updateRepeatUI);
+  byId('ef-repeat-count').addEventListener('input', updateRepeatUI);
+  byId('ef-date').addEventListener('input', updateRepeatUI);
   byId('ef-save').addEventListener('click', () => {
     const form = byId('event-form');
     const id = form.dataset.id;
+    const isNew = form.dataset.new === '1';
     const title = byId('ef-title').value.trim();
     if (!title) { alert('内容（タイトル）を入力してください'); return; }
     const type = byId('ef-type').value;
@@ -1603,10 +1646,20 @@ function initScheduleTab() {
     const existing = DB.events.find(x => x.id === id);
     if (existing) {
       Object.assign(existing, data);
+      currentEventId = id;
     } else {
-      DB.events.push(Object.assign({ id, result: null }, data));
+      // 新規：くり返し設定があれば複数日を一度に登録
+      const mode = byId('ef-repeat').value;
+      const dates = (mode !== 'none' && data.date)
+        ? repeatDates(data.date, mode, byId('ef-repeat-count').value)
+        : [data.date];
+      dates.forEach((dt, i) => {
+        const eid = i === 0 ? id : uid('e');
+        DB.events.push(Object.assign({ id: eid, result: null }, data, { date: dt }));
+        if (i === 0) currentEventId = eid;
+      });
+      if (dates.length > 1) alert(`${dates.length} 件の予定を登録しました。`);
     }
-    currentEventId = id;
     saveDB();
     form.classList.add('hidden');
     renderSchedule();

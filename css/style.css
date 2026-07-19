@@ -400,3 +400,7 @@ body.role-player .player-only { display: block !important; }
 .mi-vtitle { flex: 2 1 220px; font-weight: 700; }
 .mi-vmin { font-weight: 700; color: var(--green-dark); white-space: nowrap; }
 .mi-vnote { flex: 1 1 160px; color: #5c6b57; font-size: 13px; }
+
+/* 予定フォームの「複数日登録」ブロック */
+.ef-repeat { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.ef-repeat #ef-repeat-hint { margin: 4px 0 0; color: #1c7c44; }

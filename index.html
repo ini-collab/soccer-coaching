@@ -222,6 +222,24 @@
           <label>練習メニュー<select id="ef-menu"></select></label>
         </div>
         <label class="block">メモ・連絡事項<textarea id="ef-note" rows="2" placeholder="集合時間・持ち物など"></textarea></label>
+
+        <div id="ef-repeat-wrap" class="ef-repeat">
+          <div class="form-grid">
+            <label>複数日にまとめて登録
+              <select id="ef-repeat">
+                <option value="none">1日だけ登録</option>
+                <option value="weekly">毎週（同じ曜日）</option>
+                <option value="biweekly">隔週（2週ごと）</option>
+                <option value="daily">毎日（連続）</option>
+              </select>
+            </label>
+            <label id="ef-repeat-count-wrap">回数（最初の日を含む）
+              <input id="ef-repeat-count" type="number" min="2" max="30" value="4" inputmode="numeric">
+            </label>
+          </div>
+          <p class="hint" id="ef-repeat-hint"></p>
+        </div>
+
         <div class="btn-row end">
           <button id="ef-save" class="btn primary">保存</button>
           <button id="ef-cancel" class="btn">キャンセル</button>
