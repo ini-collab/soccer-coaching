@@ -7,9 +7,9 @@
  *  - 約20秒ごとに他メンバーの変更を取得して画面へ反映
  * ======================================================= */
 (function () {
-  const KINDS = ['drills', 'menus', 'boards', 'formations', 'members', 'events', 'attendance'];
+  const KINDS = ['drills', 'menus', 'boards', 'formations', 'members', 'events', 'attendance', 'coachnotes'];
   const clone = o => JSON.parse(JSON.stringify(o));
-  const emptyDB = () => ({ drills: [], menus: [], boards: [], formations: [], members: [], events: [], attendance: [] });
+  const emptyDB = () => ({ drills: [], menus: [], boards: [], formations: [], members: [], events: [], attendance: [], coachnotes: [] });
   const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, c => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ));

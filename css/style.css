@@ -454,3 +454,24 @@ body.role-player .player-only { display: block !important; }
   .cal-ev { font-size: 10px; padding: 1px 3px; }
   .cal-grid { gap: 2px; }
 }
+
+/* =========================================================
+ * 公開/非公開トグル・バッジ、コーチ連絡
+ * ======================================================= */
+.vis-toggle {
+  display: flex; align-items: center; gap: 8px; margin-top: 10px;
+  font-size: 13px; font-weight: 700; color: #47543f; cursor: pointer;
+}
+.vis-toggle input { width: 20px; height: 20px; min-height: 0; flex: 0 0 auto; accent-color: var(--green); }
+.vis-badge {
+  display: inline-block; margin-left: 8px; font-size: 11px; font-weight: 700;
+  color: #8a5a1a; background: #fdf1dc; border: 1px solid #f0d9a8; border-radius: 8px; padding: 1px 8px; white-space: nowrap;
+}
+
+/* コーチ連絡 */
+.cn-item { margin: 0 0 10px; }
+.cn-meta { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #5c6b57; }
+.cn-meta b { color: var(--green-dark); }
+.cn-time { font-size: 12px; }
+.cn-meta .cn-del { margin-left: auto; }
+.cn-text { margin-top: 6px; font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }

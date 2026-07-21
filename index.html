@@ -20,6 +20,7 @@
       <button class="tab-btn" data-tab="formation">🧩 ポジション</button>
       <button class="tab-btn" data-tab="schedule">📅 スケジュール</button>
       <button class="tab-btn" data-tab="roster">👥 メンバー</button>
+      <button class="tab-btn coach-only" data-tab="coachnotes">🔒 コーチ連絡</button>
       <button class="tab-btn" data-tab="data">💾 データ</button>
     </nav>
   </header>
@@ -41,6 +42,8 @@
           <label>対象<select id="menu-age"></select></label>
           <label>場所・備考<input id="menu-note" placeholder="例：第2グラウンド"></label>
         </div>
+
+        <label class="vis-toggle coach-only"><input type="checkbox" id="menu-visible" checked> 👥 プレイヤーにも公開する（オフでコーチのみ）</label>
 
         <h3>メニュー内容 <span id="menu-total" class="total"></span></h3>
         <div id="menu-items"></div>
@@ -76,6 +79,7 @@
         <label class="block">やり方<textarea id="df-desc" rows="4" placeholder="ルール・進め方を書きます"></textarea></label>
         <label class="block">コーチングポイント<textarea id="df-points" rows="3" placeholder="声かけのポイントなど"></textarea></label>
         <label class="block">図（戦術ボードで作成したもの）<select id="df-board"></select></label>
+        <label class="vis-toggle"><input type="checkbox" id="df-visible" checked> 👥 プレイヤーにも公開する（オフでコーチのみ）</label>
         <div class="btn-row end">
           <button id="df-save" class="btn primary">保存</button>
           <button id="df-cancel" class="btn">キャンセル</button>
@@ -119,6 +123,7 @@
 
           <svg id="board-svg" xmlns="http://www.w3.org/2000/svg"></svg>
 
+          <label class="vis-toggle coach-only"><input type="checkbox" id="board-visible" checked> 👥 プレイヤーにも公開する（オフでコーチのみ）</label>
           <div class="btn-row board-actions">
             <input id="board-name" class="coach-only" placeholder="ボード名（例：コーナーキックの守備）">
             <button id="board-save" class="btn primary coach-only">💾 保存</button>
@@ -174,6 +179,7 @@
             <select id="fm-format" class="field-select coach-only"></select>
             <select id="fm-preset" class="field-select coach-only"></select>
             <input id="fm-name" class="coach-only" placeholder="名前（例：vs ○○FC 前半）">
+            <label class="vis-toggle coach-only"><input type="checkbox" id="fm-visible" checked> 👥 プレイヤーに公開</label>
           </div>
           <svg id="formation-svg" xmlns="http://www.w3.org/2000/svg" class="formation"></svg>
           <div class="btn-row board-actions">
@@ -222,6 +228,7 @@
           <label>練習メニュー<select id="ef-menu"></select></label>
         </div>
         <label class="block">メモ・連絡事項<textarea id="ef-note" rows="2" placeholder="集合時間・持ち物など"></textarea></label>
+        <label class="vis-toggle"><input type="checkbox" id="ef-visible" checked> 👥 プレイヤーにも公開する（オフでコーチのみ）</label>
 
         <div id="ef-repeat-wrap" class="ef-repeat">
           <div class="form-grid">
@@ -296,6 +303,25 @@
       </div>
 
       <div id="roster-list" class="drill-grid"></div>
+    </section>
+
+    <!-- ============ コーチ連絡（コーチ専用） ============ -->
+    <section id="tab-coachnotes" class="tab coach-only">
+      <div class="pane-head">
+        <h2>🔒 コーチ連絡（コーチ専用）</h2>
+        <span class="hint">この内容はコーチだけが見られます。プレイヤーには表示されません。</span>
+      </div>
+
+      <div class="card">
+        <label class="block">連絡・メモを投稿
+          <textarea id="cn-input" rows="3" placeholder="例：土曜は用具当番が田中コーチ。ビブスの洗濯をお願いします。"></textarea>
+        </label>
+        <div class="btn-row end">
+          <button id="cn-post" class="btn primary">投稿する</button>
+        </div>
+      </div>
+
+      <div id="cn-list"></div>
     </section>
 
     <!-- ============ データ管理 ============ -->

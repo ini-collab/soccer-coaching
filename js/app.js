@@ -168,8 +168,14 @@ function seedDB() {
       { id: 'e1__p2', eventId: 'e1', memberId: 'p2', status: 'maybe', by: '' },
       { id: 'e2__p1', eventId: 'e2', memberId: 'p1', status: 'present', by: '' },
     ],
+    coachnotes: [
+      { id: 'cn1', text: 'コーチ連絡へようこそ。ここはコーチだけが見られる連絡ボードです。\n用具の準備・当番・保護者対応などの共有にお使いください。', author: '', ts: Date.now() - 3600000 },
+    ],
   };
 }
+
+/** その項目が「コーチのみ（プレイヤー非公開）」か */
+function isCoachOnly(item) { return !!(item && item.vis === 'coach'); }
 
 /** 今日からn日後の YYYY-MM-DD */
 function futureDate(n) {
@@ -188,7 +194,13 @@ function normalizeDB(d) {
     members: Array.isArray(d.members) ? d.members : [],
     events: Array.isArray(d.events) ? d.events : [],
     attendance: Array.isArray(d.attendance) ? d.attendance : [],
+    coachnotes: Array.isArray(d.coachnotes) ? d.coachnotes : [],
   };
+}
+
+/** 公開/非公開バッジ（コーチ画面用。プレイヤーには非公開項目自体が届かない）*/
+function visBadge(item) {
+  return isCoachOnly(item) ? '<span class="vis-badge">🔒 コーチのみ</span>' : '';
 }
 
 /* 保存先ストア（標準：この端末のlocalStorage）
@@ -448,6 +460,7 @@ function showTab(name) {
   if (name === 'formation') renderFormationList();
   if (name === 'schedule') renderSchedule();
   if (name === 'roster') renderRoster();
+  if (name === 'coachnotes') renderCoachNotes();
   if (name === 'data') renderDataTab();
 }
 
@@ -459,7 +472,7 @@ let currentMenuId = null;
 function renderMenus() {
   const list = byId('menu-list');
   list.innerHTML = DB.menus.map(m =>
-    `<button class="chip ${m.id === currentMenuId ? 'active' : ''}" data-id="${m.id}">${esc(m.title || '（無題）')}</button>`
+    `<button class="chip ${m.id === currentMenuId ? 'active' : ''}" data-id="${m.id}">${isCoachOnly(m) ? '🔒 ' : ''}${esc(m.title || '（無題）')}</button>`
   ).join('') || '<p class="hint">「＋ 新しいメニュー」から作成できます。</p>';
   const editor = byId('menu-editor');
   editor.classList.toggle('hidden', !currentMenuId);
@@ -477,6 +490,7 @@ function fillMenuEditor() {
   byId('menu-date').value = m.date || '';
   byId('menu-age').value = m.age || '';
   byId('menu-note').value = m.note || '';
+  byId('menu-visible').checked = !isCoachOnly(m);
   // プレイヤーは閲覧のみ：基本情報の入力を編集不可にする
   const ro = !canEdit();
   ['menu-title', 'menu-date', 'menu-note'].forEach(id => { byId(id).readOnly = ro; });
@@ -556,6 +570,14 @@ function initMenusTab() {
         if (chip) chip.textContent = m.title || '（無題）';
       }
     });
+  });
+
+  byId('menu-visible').addEventListener('change', () => {
+    const m = currentMenu();
+    if (!m) return;
+    m.vis = byId('menu-visible').checked ? '' : 'coach';
+    saveDB();
+    renderMenus();
   });
 
   byId('menu-add-item').addEventListener('click', () => {
@@ -657,7 +679,7 @@ function renderDrills() {
       ${board ? `<div class="b-thumb">${boardSVG(board, 'screen')}</div>` : ''}
       <div class="drill-card-body">
         <div class="drill-card-head">
-          <b>${esc(d.name)}</b>
+          <b>${esc(d.name)}${visBadge(d)}</b>
           <span class="tag">${esc(d.category || '')}</span>
         </div>
         <div class="drill-card-meta">${esc(d.age || '')}${d.duration ? `・約${esc(d.duration)}分` : ''}${d.players ? `・${esc(d.players)}` : ''}</div>
@@ -685,6 +707,7 @@ function openDrillForm(drill) {
   const sel = byId('df-board');
   sel.innerHTML = '<option value="">（図なし）</option>' +
     DB.boards.map(b => `<option value="${b.id}"${drill && drill.boardId === b.id ? ' selected' : ''}>${esc(b.name)}</option>`).join('');
+  byId('df-visible').checked = !isCoachOnly(drill);
   byId('df-delete').classList.toggle('hidden', !drill);
   byId('drill-form').classList.remove('hidden');
   byId('drill-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -721,6 +744,7 @@ function initDrillsTab() {
       description: byId('df-desc').value.trim(),
       points: byId('df-points').value.trim(),
       boardId: byId('df-board').value,
+      vis: byId('df-visible').checked ? '' : 'coach',
     };
     if (editingDrillId) {
       const d = DB.drills.find(x => x.id === editingDrillId);
@@ -758,7 +782,7 @@ function renderBoardList() {
   list.innerHTML = DB.boards.map(b => `
     <div class="card board-item ${b.id === currentBoardId ? 'active' : ''}">
       <div class="b-thumb">${boardSVG(b, 'screen')}</div>
-      <div class="board-item-name">${esc(b.name)}</div>
+      <div class="board-item-name">${esc(b.name)}${visBadge(b)}</div>
       <div class="btn-row">
         <button class="btn small b-open" data-id="${b.id}">開く</button>
         <button class="btn small b-png" data-id="${b.id}">PNG</button>
@@ -804,11 +828,12 @@ function initBoardTab() {
   byId('board-save').addEventListener('click', () => {
     const name = byId('board-name').value.trim() || '無題のボード';
     const data = editor.serialize();
+    const vis = byId('board-visible').checked ? '' : 'coach';
     if (currentBoardId) {
       const b = DB.boards.find(x => x.id === currentBoardId);
-      if (b) Object.assign(b, { name, field: data.field, elements: data.elements });
+      if (b) Object.assign(b, { name, field: data.field, elements: data.elements, vis });
     } else {
-      const b = Object.assign({ id: uid('b'), name }, data);
+      const b = Object.assign({ id: uid('b'), name, vis }, data);
       DB.boards.push(b);
       currentBoardId = b.id;
     }
@@ -822,6 +847,7 @@ function initBoardTab() {
   byId('board-newbtn').addEventListener('click', () => {
     currentBoardId = null;
     byId('board-name').value = '';
+    byId('board-visible').checked = true;
     editor.load({ field: fieldSel.value, elements: [] });
     renderBoardList();
   });
@@ -843,6 +869,7 @@ function initBoardTab() {
     if (btn.classList.contains('b-open')) {
       currentBoardId = b.id;
       byId('board-name').value = b.name;
+      byId('board-visible').checked = !isCoachOnly(b);
       fieldSel.value = b.field || 'full';
       editor.load(b);
       renderBoardList();
@@ -899,7 +926,7 @@ function renderFormationList() {
   list.innerHTML = DB.formations.map(f => `
     <div class="card board-item ${f.id === FM.id ? 'active' : ''}">
       <div class="b-thumb tall"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 1050">${formationSVG(f, 'screen')}</svg></div>
-      <div class="board-item-name">${esc(f.name)}<br><small>${esc((FORMATION_FORMATS[f.format] || {}).label || '')} ${esc(f.preset || '')}</small></div>
+      <div class="board-item-name">${esc(f.name)}${visBadge(f)}<br><small>${esc((FORMATION_FORMATS[f.format] || {}).label || '')} ${esc(f.preset || '')}</small></div>
       <div class="btn-row">
         <button class="btn small f-open" data-id="${f.id}">開く</button>
         <button class="btn small f-print" data-id="${f.id}">🖨</button>
@@ -1065,7 +1092,7 @@ function initFormationTab() {
   byId('fm-save').addEventListener('click', () => {
     FM.name = byId('fm-name').value.trim() || `${FORMATION_FORMATS[FM.format].label} ${FM.preset}`;
     byId('fm-name').value = FM.name;
-    const data = { name: FM.name, format: FM.format, preset: FM.preset, positions: JSON.parse(JSON.stringify(FM.positions)) };
+    const data = { name: FM.name, format: FM.format, preset: FM.preset, positions: JSON.parse(JSON.stringify(FM.positions)), vis: byId('fm-visible').checked ? '' : 'coach' };
     if (FM.id) {
       const f = DB.formations.find(x => x.id === FM.id);
       if (f) Object.assign(f, data);
@@ -1083,6 +1110,7 @@ function initFormationTab() {
     FM.id = null;
     FM.name = '';
     byId('fm-name').value = '';
+    byId('fm-visible').checked = true;
     FM.positions = presetPositions(FM.format, FM.preset);
     renderFormationSVG();
     renderFormationList();
@@ -1109,6 +1137,7 @@ function initFormationTab() {
       FM.preset = f.preset;
       FM.positions = JSON.parse(JSON.stringify(f.positions || []));
       byId('fm-name').value = f.name;
+      byId('fm-visible').checked = !isCoachOnly(f);
       byId('fm-format').value = f.format;
       fmPresetOptions();
       renderFormationSVG();
@@ -1128,6 +1157,52 @@ function initFormationTab() {
 
   fmPresetOptions();
   renderFormationSVG();
+}
+
+/* =========================================================
+ * コーチ連絡（コーチ専用の連絡ボード）
+ * ======================================================= */
+function fmtDateTime(ts) {
+  const d = new Date(ts || Date.now());
+  const w = ['日', '月', '火', '水', '木', '金', '土'][d.getDay()] || '';
+  return `${d.getMonth() + 1}/${d.getDate()}（${w}）${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+function renderCoachNotes() {
+  const list = byId('cn-list');
+  const notes = DB.coachnotes.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0));
+  list.innerHTML = notes.map(n => `
+    <div class="card cn-item" data-id="${n.id}">
+      <div class="cn-meta"><b>${esc(n.author || 'コーチ')}</b>　<span class="cn-time">${fmtDateTime(n.ts)}</span>
+        <button class="btn small danger cn-del" data-id="${n.id}">削除</button>
+      </div>
+      <div class="cn-text">${nl2br(n.text)}</div>
+    </div>`).join('') || '<p class="hint">まだ連絡はありません。上のフォームから投稿できます。</p>';
+}
+
+function initCoachNotesTab() {
+  byId('cn-post').addEventListener('click', () => {
+    const text = byId('cn-input').value.trim();
+    if (!text) { alert('連絡内容を入力してください'); return; }
+    DB.coachnotes.push({
+      id: uid('cn'), text,
+      author: (window.TEAM_USER && window.TEAM_USER.name) || 'コーチ',
+      ts: Date.now(),
+    });
+    byId('cn-input').value = '';
+    saveDB();
+    renderCoachNotes();
+  });
+  byId('cn-list').addEventListener('click', e => {
+    const del = e.target.closest('.cn-del');
+    if (!del) return;
+    const n = DB.coachnotes.find(x => x.id === del.dataset.id);
+    if (n && confirm('この連絡を削除しますか？')) {
+      DB.coachnotes = DB.coachnotes.filter(x => x.id !== n.id);
+      saveDB();
+      renderCoachNotes();
+    }
+  });
 }
 
 /* =========================================================
@@ -1423,7 +1498,7 @@ function renderEventList() {
     const c = attCounts(e.id);
     return `<button class="event-chip ${e.id === currentEventId ? 'active' : ''} ${past ? 'past' : ''} type-${e.type}" data-id="${e.id}">
       <span class="ev-date">${esc(eventDateLabel(e))}</span>
-      <span class="ev-title"><span class="ev-badge">${esc(EVENT_TYPES[e.type] || '')}</span>${esc(e.title || '（無題）')}</span>
+      <span class="ev-title"><span class="ev-badge">${esc(EVENT_TYPES[e.type] || '')}</span>${esc(e.title || '（無題）')}${visBadge(e)}</span>
       <span class="ev-sub">${e.place ? esc(e.place) : ''}${resultLabel(e) ? '　結果 ' + esc(resultLabel(e)) : ''}　<span class="ev-att">出${c.present}/欠${c.absent}/未定${c.maybe}</span></span>
     </button>`;
   }).join('') || '<p class="hint">予定はまだありません。</p>';
@@ -1463,7 +1538,7 @@ function renderCalendar() {
     const dowIdx = (startDow + day - 1) % 7;
     const evs = (byDate[ds] || []).slice().sort((a, b) => (a.start || '').localeCompare(b.start || ''));
     const pills = evs.map(e =>
-      `<button class="cal-ev type-${e.type} ${e.id === currentEventId ? 'sel' : ''}" data-id="${e.id}" title="${esc(e.title || '')}">${e.start ? esc(e.start) + ' ' : ''}${esc(e.title || '（無題）')}</button>`
+      `<button class="cal-ev type-${e.type} ${e.id === currentEventId ? 'sel' : ''}" data-id="${e.id}" title="${esc(e.title || '')}">${isCoachOnly(e) ? '🔒' : ''}${e.start ? esc(e.start) + ' ' : ''}${esc(e.title || '（無題）')}</button>`
     ).join('');
     cells += `<div class="cal-cell ${ds === todayStr ? 'today' : ''} ${dowIdx === 0 ? 'sun' : ''} ${dowIdx === 6 ? 'sat' : ''}" data-date="${ds}">
       <div class="cal-daynum">${day}${ds === todayStr ? '<span class="cal-todaymark">今日</span>' : ''}</div>
@@ -1521,7 +1596,7 @@ function renderEventDetail() {
 
   byId('event-detail').innerHTML = `
     <div class="event-head">
-      <h3>${esc(e.title || '（無題）')}</h3>
+      <h3>${esc(e.title || '（無題）')}${visBadge(e)}</h3>
       <div id="event-edit-btns" class="btn-row ${canE ? '' : 'hidden'}">
         <button id="ev-edit" class="btn small">✎ 編集</button>
         <button id="ev-copy" class="btn small">📋 コピー</button>
@@ -1634,6 +1709,7 @@ function openEventForm(e, isCopy) {
   byId('ef-note').value = src.note;
   byId('ef-menu').innerHTML = '<option value="">（なし）</option>' +
     DB.menus.map(m => `<option value="${m.id}"${m.id === src.menuId ? ' selected' : ''}>${esc(m.title || '（無題）')}</option>`).join('');
+  byId('ef-visible').checked = !isCoachOnly(src);
   byId('event-form').dataset.id = isNew ? uid('e') : src.id;
   byId('event-form').dataset.new = isNew ? '1' : '';
   // くり返し（複数日登録）は新規・コピーのときだけ表示
@@ -1727,6 +1803,7 @@ function initScheduleTab() {
       opponent: type === 'match' ? byId('ef-opponent').value.trim() : '',
       note: byId('ef-note').value.trim(),
       menuId: byId('ef-menu').value,
+      vis: byId('ef-visible').checked ? '' : 'coach',
     };
     const existing = DB.events.find(x => x.id === id);
     if (existing) {
@@ -1766,8 +1843,11 @@ window.applyExternalDB = function (newDb) {
   if (currentBoardId && !DB.boards.some(b => b.id === currentBoardId)) currentBoardId = null;
   if (FM.id && !DB.formations.some(f => f.id === FM.id)) FM.id = null;
   if (currentEventId && !DB.events.some(e => e.id === currentEventId)) currentEventId = null;
-  const active = document.querySelector('.tab-btn.active');
-  showTab(active ? active.dataset.tab : 'menus');
+  let active = document.querySelector('.tab-btn.active');
+  let name = active ? active.dataset.tab : 'menus';
+  // プレイヤーはコーチ専用タブを開けない
+  if (name === 'coachnotes' && !canEdit()) name = 'schedule';
+  showTab(name);
 };
 
 /** 権限に応じて画面の表示・初期タブを整える（チーム共有版で呼ばれる）*/
@@ -1799,6 +1879,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initFormationTab();
   initScheduleTab();
   initRosterTab();
+  initCoachNotesTab();
   initDataTab();
 
   if (DB.menus.length) currentMenuId = DB.menus[0].id;
