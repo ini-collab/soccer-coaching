@@ -290,10 +290,21 @@
       <div id="member-form" class="card hidden coach-only">
         <h3 id="member-form-title">新しいメンバー</h3>
         <div class="form-grid">
-          <label>名前<input id="mf-name" placeholder="例：たろう"></label>
-          <label>学年<select id="mf-grade"></select></label>
-          <label>背番号<input id="mf-number" inputmode="numeric" placeholder="例：7"></label>
-          <label>メモ<input id="mf-note" placeholder="例：ポジションGK・保護者連絡先など"></label>
+          <label>区分
+            <select id="mf-kind">
+              <option value="player">選手</option>
+              <option value="coach">コーチ</option>
+            </select>
+          </label>
+          <label>名前<input id="mf-name" placeholder="例：たろう／さとうコーチ"></label>
+          <label class="mf-player-field">学年<select id="mf-grade"></select></label>
+          <label class="mf-player-field">背番号<input id="mf-number" inputmode="numeric" placeholder="例：7"></label>
+          <label class="mf-coach-field">役割<input id="mf-role" placeholder="例：監督／GKコーチ／会計"></label>
+          <label>メモ<input id="mf-note" placeholder="例：連絡先・ポジションなど"></label>
+        </div>
+        <div class="block mf-coach-field" id="mf-grades-wrap">
+          <span class="field-label">担当学年（複数選べます・任意）</span>
+          <div id="mf-grades" class="grade-checks"></div>
         </div>
         <div class="btn-row end">
           <button id="mf-save" class="btn primary">保存</button>
@@ -302,7 +313,7 @@
         </div>
       </div>
 
-      <div id="roster-list" class="drill-grid"></div>
+      <div id="roster-list"></div>
     </section>
 
     <!-- ============ コーチ連絡（コーチ専用） ============ -->

@@ -148,9 +148,10 @@ function seedDB() {
       { id: 'f1', name: '8人制 基本（3-3-1）サンプル', format: '8', preset: '3-3-1', positions: presetPositions('8', '3-3-1') },
     ],
     members: [
-      { id: 'p1', name: 'たろう', grade: '小2', number: '7', note: '', userId: '' },
-      { id: 'p2', name: 'はなこ', grade: '小1', number: '10', note: '', userId: '' },
-      { id: 'p3', name: 'けんた', grade: '年長', number: '4', note: '', userId: '' },
+      { id: 'c1', kind: 'coach', name: 'さとうコーチ', role: '監督', grades: ['小1', '小2'], note: '', userId: '' },
+      { id: 'p1', kind: 'player', name: 'たろう', grade: '小2', number: '7', note: '', userId: '' },
+      { id: 'p2', kind: 'player', name: 'はなこ', grade: '小1', number: '10', note: '', userId: '' },
+      { id: 'p3', kind: 'player', name: 'けんた', grade: '年長', number: '4', note: '', userId: '' },
     ],
     events: [
       {
@@ -176,6 +177,12 @@ function seedDB() {
 
 /** その項目が「コーチのみ（プレイヤー非公開）」か */
 function isCoachOnly(item) { return !!(item && item.vis === 'coach'); }
+
+/* ---- メンバーの区分（選手／コーチ）---- */
+function isCoachMember(m) { return !!(m && m.kind === 'coach'); }
+function playerMembers() { return DB.members.filter(m => !isCoachMember(m)); }
+function coachMembers() { return DB.members.filter(m => isCoachMember(m)); }
+function coachGradesLabel(m) { return (m && Array.isArray(m.grades) ? m.grades : []).join('・'); }
 
 /** 今日からn日後の YYYY-MM-DD */
 function futureDate(n) {
@@ -353,7 +360,7 @@ function attStatus(eventId, memberId) {
 function attCounts(eventId) {
   const map = attForEvent(eventId);
   const c = { present: 0, absent: 0, maybe: 0, none: 0 };
-  DB.members.forEach(m => {
+  playerMembers().forEach(m => {
     const s = map[m.id] || '';
     c[s === '' ? 'none' : s]++;
   });
@@ -403,7 +410,7 @@ function scheduleListPrintHTML(events) {
 }
 
 function eventSheetPrintHTML(e) {
-  const rows = DB.members.map((m, i) => {
+  const rows = playerMembers().map((m, i) => {
     const s = attStatus(e.id, m.id);
     return `<tr>
       <td>${i + 1}</td>
@@ -434,15 +441,28 @@ function eventSheetPrintHTML(e) {
 }
 
 function rosterPrintHTML() {
-  const rows = DB.members.map((m, i) =>
+  const coaches = coachMembers();
+  const players = playerMembers();
+  const coachRows = coaches.map((m, i) =>
+    `<tr><td>${i + 1}</td><td>${esc(m.name)}</td><td>${esc(m.role || '')}</td><td>${esc(coachGradesLabel(m))}</td><td>${esc(m.note || '')}</td></tr>`
+  ).join('');
+  const playerRows = players.map((m, i) =>
     `<tr><td>${i + 1}</td><td>${esc(m.number || '')}</td><td>${esc(m.name)}</td><td>${esc(m.grade || '')}</td><td>${esc(m.note || '')}</td></tr>`
   ).join('');
+  const coachTable = coaches.length ? `
+    <h2 class="p-subtitle">コーチ・スタッフ（${coaches.length}名）</h2>
+    <table class="p-table wide">
+      <thead><tr><th>No.</th><th>名前</th><th>役割</th><th>担当学年</th><th>メモ</th></tr></thead>
+      <tbody>${coachRows}</tbody>
+    </table>` : '';
   return `<div class="p-doc">
     <h1 class="p-title">メンバー名簿</h1>
-    <div class="p-meta">全 ${DB.members.length} 名</div>
+    <div class="p-meta">コーチ・スタッフ ${coaches.length}名／選手 ${players.length}名</div>
+    ${coachTable}
+    <h2 class="p-subtitle">選手（${players.length}名）</h2>
     <table class="p-table wide">
       <thead><tr><th>No.</th><th>背番号</th><th>名前</th><th>学年</th><th>メモ</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="5">メンバーが登録されていません</td></tr>'}</tbody>
+      <tbody>${playerRows || '<tr><td colspan="5">選手が登録されていません</td></tr>'}</tbody>
     </table>
     <div class="p-foot">サッカーコーチノートで作成</div>
   </div>`;
@@ -954,7 +974,7 @@ function openFmSlot(i) {
   // 登録メンバーの選択肢
   const sel = byId('fm-slot-member');
   const opts = ['<option value="">（自由入力）</option>'];
-  DB.members.forEach(m => {
+  playerMembers().forEach(m => {
     const label = esc(m.name) + (m.grade ? '（' + esc(m.grade) + '）' : '') + (m.number ? ' #' + esc(m.number) : '');
     opts.push(`<option value="${m.id}">${label}</option>`);
   });
@@ -1288,39 +1308,75 @@ function upsert(arr, item) {
  * ======================================================= */
 let editingMemberId = null;
 
+function memberCardHTML(m, canE) {
+  const coach = isCoachMember(m);
+  const sub = coach
+    ? [m.role ? esc(m.role) : '', coachGradesLabel(m) ? '担当：' + esc(coachGradesLabel(m)) : ''].filter(Boolean).join('　')
+    : '';
+  return `<div class="card member-card ${coach ? 'is-coach' : ''}">
+    <div class="member-main">
+      ${coach ? '<span class="coach-chip">コーチ</span>' : `<span class="member-num">${m.number ? '#' + esc(m.number) : ''}</span>`}
+      <b>${esc(m.name)}</b>
+      ${coach
+        ? (m.role ? `<span class="tag">${esc(m.role)}</span>` : '')
+        : `<span class="tag">${esc(m.grade || '学年未設定')}</span>`}
+    </div>
+    ${coach && coachGradesLabel(m) ? `<div class="drill-card-meta">担当学年：${esc(coachGradesLabel(m))}</div>` : ''}
+    ${m.note ? `<div class="drill-card-meta">${esc(m.note)}</div>` : ''}
+    ${canE ? `<div class="btn-row">
+      <button class="btn small member-edit" data-id="${m.id}">✎ 編集</button>
+      <button class="btn small danger member-del" data-id="${m.id}">削除</button>
+    </div>` : ''}
+  </div>`;
+}
+
 function renderRoster() {
   const list = byId('roster-list');
   const canE = canEdit();
   byId('roster-new').classList.toggle('hidden', !canE);
-  list.innerHTML = DB.members.map(m => `
-    <div class="card member-card">
-      <div class="member-main">
-        <span class="member-num">${m.number ? '#' + esc(m.number) : ''}</span>
-        <b>${esc(m.name)}</b>
-        <span class="tag">${esc(m.grade || '学年未設定')}</span>
-      </div>
-      ${m.note ? `<div class="drill-card-meta">${esc(m.note)}</div>` : ''}
-      ${canE ? `<div class="btn-row">
-        <button class="btn small member-edit" data-id="${m.id}">✎ 編集</button>
-        <button class="btn small danger member-del" data-id="${m.id}">削除</button>
-      </div>` : ''}
-    </div>`).join('') || `<p class="hint">${canE ? '「＋ メンバーを追加」から選手を登録できます。' : 'メンバーはまだ登録されていません。'}</p>`;
+  const coaches = coachMembers();
+  const players = playerMembers();
+  let html = '';
+  if (coaches.length) {
+    html += `<h3 class="roster-head">コーチ・スタッフ（${coaches.length}名）</h3>` +
+      `<div class="drill-grid">${coaches.map(m => memberCardHTML(m, canE)).join('')}</div>`;
+  }
+  html += `<h3 class="roster-head">選手（${players.length}名）</h3>` +
+    (players.length
+      ? `<div class="drill-grid">${players.map(m => memberCardHTML(m, canE)).join('')}</div>`
+      : `<p class="hint">${canE ? '「＋ メンバーを追加」から選手を登録できます。' : '選手はまだ登録されていません。'}</p>`);
+  list.innerHTML = html;
+}
+
+function updateMemberFormKind() {
+  const coach = byId('mf-kind').value === 'coach';
+  document.querySelectorAll('#member-form .mf-coach-field').forEach(el => el.classList.toggle('hidden', !coach));
+  document.querySelectorAll('#member-form .mf-player-field').forEach(el => el.classList.toggle('hidden', coach));
 }
 
 function openMemberForm(m) {
   editingMemberId = m ? m.id : null;
+  const coach = isCoachMember(m);
   byId('member-form-title').textContent = m ? 'メンバーを編集' : '新しいメンバー';
+  byId('mf-kind').value = coach ? 'coach' : 'player';
   byId('mf-name').value = m?.name || '';
   byId('mf-grade').value = m?.grade || GRADES[0];
   byId('mf-number').value = m?.number || '';
+  byId('mf-role').value = m?.role || '';
   byId('mf-note').value = m?.note || '';
+  // 担当学年チェックボックス
+  const g = coach && Array.isArray(m.grades) ? m.grades : [];
+  byId('mf-grades').innerHTML = GRADES.map(gr =>
+    `<label class="grade-check"><input type="checkbox" value="${esc(gr)}"${g.includes(gr) ? ' checked' : ''}> ${esc(gr)}</label>`
+  ).join('');
+  updateMemberFormKind();
   byId('mf-delete').classList.toggle('hidden', !m);
   byId('member-form').classList.remove('hidden');
   byId('member-form').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 /* ---- メンバーのCSV書き出し／読み込み ---- */
-const CSV_HEADERS = ['ID', '名前', '学年', '背番号', 'メモ'];
+const CSV_HEADERS = ['ID', '区分', '名前', '学年', '背番号', '役割', '担当学年', 'メモ'];
 
 function csvCell(s) {
   s = String(s ?? '');
@@ -1328,7 +1384,19 @@ function csvCell(s) {
 }
 
 function membersToCSV() {
-  const rows = DB.members.map(m => [m.id, m.name, m.grade || '', m.number || '', m.note || ''].map(csvCell).join(','));
+  const rows = DB.members.map(m => {
+    const coach = isCoachMember(m);
+    return [
+      m.id,
+      coach ? 'コーチ' : '選手',
+      m.name,
+      coach ? '' : (m.grade || ''),
+      coach ? '' : (m.number || ''),
+      coach ? (m.role || '') : '',
+      coach ? coachGradesLabel(m) : '',
+      m.note || '',
+    ].map(csvCell).join(',');
+  });
   // 先頭にBOMを付けてExcelで文字化けしないようにする
   return '\ufeff' + [CSV_HEADERS.join(','), ...rows].join('\r\n') + '\r\n';
 }
@@ -1364,17 +1432,21 @@ function importMembersCSV(text) {
 
   const norm = s => String(s || '').trim().toLowerCase();
   const head = rows[0].map(norm);
-  const isHeader = head.some(h => ['id', '名前', '氏名', 'name', '学年', 'grade', '背番号', '番号', 'number', 'no', 'メモ', 'note', '備考'].includes(h));
-  let map = { id: -1, name: 0, grade: 1, number: 2, note: 3 };
+  const known = ['id', '区分', 'kind', '名前', '氏名', 'name', '学年', 'grade', '背番号', '番号', 'number', 'no', '役割', 'role', '担当学年', '担当', 'メモ', 'note', '備考'];
+  const isHeader = head.some(h => known.includes(h));
+  let map = { id: -1, kind: -1, name: 0, grade: 1, number: 2, role: -1, grades: -1, note: 3 };
   let start = 0;
   if (isHeader) {
     start = 1;
-    map = { id: -1, name: -1, grade: -1, number: -1, note: -1 };
+    map = { id: -1, kind: -1, name: -1, grade: -1, number: -1, role: -1, grades: -1, note: -1 };
     head.forEach((h, i) => {
       if (h === 'id') map.id = i;
+      else if (['区分', 'kind'].includes(h)) map.kind = i;
       else if (['名前', '氏名', 'name'].includes(h)) map.name = i;
       else if (['学年', 'grade'].includes(h)) map.grade = i;
       else if (['背番号', '番号', 'number', 'no'].includes(h)) map.number = i;
+      else if (['役割', 'role'].includes(h)) map.role = i;
+      else if (['担当学年', '担当'].includes(h)) map.grades = i;
       else if (['メモ', 'note', '備考'].includes(h)) map.note = i;
     });
   }
@@ -1385,12 +1457,26 @@ function importMembersCSV(text) {
   rows.slice(start).forEach(r => {
     const name = get(r, map.name);
     if (!name) return;
-    const data = { name, grade: get(r, map.grade), number: get(r, map.number), note: get(r, map.note) };
+    const kindRaw = get(r, map.kind);
+    const isCoach = /コーチ|coach|スタッフ|監督/i.test(kindRaw);
+    let data;
+    if (isCoach) {
+      const grades = get(r, map.grades).split(/[\/、,・]/).map(s => s.trim()).filter(Boolean);
+      data = { kind: 'coach', name, role: get(r, map.role), grades, note: get(r, map.note) };
+    } else {
+      data = { kind: 'player', name, grade: get(r, map.grade), number: get(r, map.number), note: get(r, map.note) };
+    }
     const gid = get(r, map.id);
     let m = gid ? DB.members.find(x => x.id === gid) : null;
     if (!m) m = DB.members.find(x => x.name === name);
-    if (m) { Object.assign(m, data); updated++; }
-    else { DB.members.push(Object.assign({ id: gid || uid('p'), userId: '' }, data)); added++; }
+    if (m) {
+      delete m.grade; delete m.number; delete m.role; delete m.grades;
+      Object.assign(m, data);
+      updated++;
+    } else {
+      DB.members.push(Object.assign({ id: gid || uid('p'), userId: '' }, data));
+      added++;
+    }
   });
   saveDB();
   renderRoster();
@@ -1431,18 +1517,25 @@ function initRosterTab() {
       }
     }
   });
+  byId('mf-kind').addEventListener('change', updateMemberFormKind);
   byId('mf-save').addEventListener('click', () => {
     const name = byId('mf-name').value.trim();
     if (!name) { alert('名前を入力してください'); return; }
-    const data = {
-      name,
-      grade: byId('mf-grade').value,
-      number: byId('mf-number').value.trim(),
-      note: byId('mf-note').value.trim(),
-    };
+    const kind = byId('mf-kind').value === 'coach' ? 'coach' : 'player';
+    let data;
+    if (kind === 'coach') {
+      const grades = [...byId('mf-grades').querySelectorAll('input:checked')].map(c => c.value);
+      data = { kind, name, role: byId('mf-role').value.trim(), grades, note: byId('mf-note').value.trim() };
+    } else {
+      data = { kind, name, grade: byId('mf-grade').value, number: byId('mf-number').value.trim(), note: byId('mf-note').value.trim() };
+    }
     if (editingMemberId) {
       const m = DB.members.find(x => x.id === editingMemberId);
-      if (m) Object.assign(m, data);
+      if (m) {
+        // 区分変更に伴い不要なフィールドを掃除
+        delete m.grade; delete m.number; delete m.role; delete m.grades;
+        Object.assign(m, data);
+      }
     } else {
       DB.members.push(Object.assign({ id: uid('p'), userId: '' }, data));
     }
@@ -1581,7 +1674,7 @@ function renderEventDetail() {
   }
 
   const c = attCounts(e.id);
-  const rows = DB.members.map(m => {
+  const rows = playerMembers().map(m => {
     const s = attStatus(e.id, m.id);
     const mine = m.id === myMemberId();
     const editable = canMarkAttendance(m.id);

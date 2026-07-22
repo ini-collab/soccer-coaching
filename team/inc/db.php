@@ -155,6 +155,33 @@ function put_item(string $kind, string $id, array $data, string $by = ''): void
     set_meta('initialized', '1');
 }
 
+/**
+ * 新しいチームに、練習の見本（ドリル・メニュー・戦術ボード・ポジション）を一度だけ投入する。
+ * 架空の選手・予定は入れない（名簿は登録したコーチ／選手だけにする）。
+ */
+function maybe_seed_sample_content(): void
+{
+    if (get_meta('seeded') === '1') {
+        return;
+    }
+    set_meta('seeded', '1');
+    $file = dirname(__DIR__) . '/seed.json';
+    if (!is_file($file)) {
+        return;
+    }
+    $seed = json_decode((string)file_get_contents($file), true);
+    if (!is_array($seed)) {
+        return;
+    }
+    foreach (['drills', 'menus', 'boards', 'formations'] as $kind) {
+        foreach (($seed[$kind] ?? []) as $item) {
+            if (is_array($item) && isset($item['id']) && is_string($item['id'])) {
+                put_item($kind, $item['id'], $item, '見本');
+            }
+        }
+    }
+}
+
 function get_meta(string $k): ?string
 {
     $st = db()->prepare('SELECT v FROM meta WHERE k = ?');

@@ -475,3 +475,19 @@ body.role-player .player-only { display: block !important; }
 .cn-time { font-size: 12px; }
 .cn-meta .cn-del { margin-left: auto; }
 .cn-text { margin-top: 6px; font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+
+/* =========================================================
+ * メンバー：コーチ表示・担当学年チェック
+ * ======================================================= */
+.roster-head { font-size: 15px; color: var(--green-dark); margin: 16px 0 8px; padding-bottom: 4px; border-bottom: 2px solid var(--line); }
+.roster-head:first-child { margin-top: 4px; }
+.member-card.is-coach { border-color: #cfe0f5; background: #f5f9ff; }
+.coach-chip { background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; border-radius: 8px; padding: 2px 8px; }
+.grade-checks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.grade-check {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 700; color: #47543f;
+  border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 10px; cursor: pointer; background: #fff;
+}
+.grade-check input { width: 18px; height: 18px; min-height: 0; accent-color: var(--green); }
+.grade-check:has(input:checked) { border-color: var(--green); background: #edf6ef; }
+.p-subtitle { font-size: 12pt; color: #12592f; margin: 10pt 0 4pt; }

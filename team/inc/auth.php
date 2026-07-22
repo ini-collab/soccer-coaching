@@ -70,14 +70,19 @@ function create_user(string $email, string $name, ?string $passHash, ?string $go
     $st = db()->prepare('INSERT INTO users (email, name, pass_hash, google_sub, role, grade, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
     $st->execute([mb_strtolower(trim($email)), trim($name), $passHash, $googleSub, $role, trim($grade), gmdate('c')]);
     $uid = (int)db()->lastInsertId();
-    // プレイヤーは名簿（共有データ）にも自動登録し、ユーザーと紐づける
+    // 新しいチームには練習の見本を一度だけ投入（架空の選手・予定は入れない）
+    maybe_seed_sample_content();
+    // 名簿（共有データ）にも自動登録し、ユーザーと紐づける
     // ID は 'pu'+ユーザーID（app.js のシード p1/p2… や uid('p') と衝突しない形）
+    $mid = 'pu' . $uid;
     if ($role === 'player') {
-        $mid = 'pu' . $uid;
-        put_item('members', $mid, ['id' => $mid, 'name' => trim($name), 'grade' => trim($grade), 'number' => '', 'note' => '', 'userId' => (string)$uid], trim($name));
-        $up = db()->prepare('UPDATE users SET member_id = ? WHERE id = ?');
-        $up->execute([$mid, $uid]);
+        put_item('members', $mid, ['id' => $mid, 'kind' => 'player', 'name' => trim($name), 'grade' => trim($grade), 'number' => '', 'note' => '', 'userId' => (string)$uid], trim($name));
+    } else {
+        // コーチも名簿にコーチとして表示される
+        put_item('members', $mid, ['id' => $mid, 'kind' => 'coach', 'name' => trim($name), 'role' => '', 'grades' => [], 'note' => '', 'userId' => (string)$uid], trim($name));
     }
+    $up = db()->prepare('UPDATE users SET member_id = ? WHERE id = ?');
+    $up->execute([$mid, $uid]);
     return $uid;
 }
 
